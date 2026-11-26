@@ -33,11 +33,12 @@ func (c Cover) RenderSVG() string {
 	b.WriteString(`<circle cx="30" cy="250" r="110" fill="#000000" fill-opacity="0.15"/>`)
 
 	// The title, one <text> element per line, centered as a block.
-	const lineHeight = 34
+	fontSize := titleFontSize(lines)
+	lineHeight := fontSize + 4
 	firstLineY := 140 - (len(lines)-1)*lineHeight/2
 	for i, line := range lines {
-		fmt.Fprintf(&b, `<text x="20" y="%d" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="#ffffff">%s</text>`,
-			firstLineY+i*lineHeight, html.EscapeString(strings.ToUpper(line)))
+		fmt.Fprintf(&b, `<text x="20" y="%d" font-family="Arial, Helvetica, sans-serif" font-size="%d" font-weight="800" fill="#ffffff">%s</text>`,
+			firstLineY+i*lineHeight, fontSize, html.EscapeString(strings.ToUpper(line)))
 	}
 
 	// The platform strip.
@@ -47,6 +48,18 @@ func (c Cover) RenderSVG() string {
 
 	b.WriteString(`</svg>`)
 	return b.String()
+}
+
+// titleFontSize picks the largest font size, up to 30, at which the longest
+// line still fits inside the cover. A bold capital letter is about 0.72 times
+// the font size wide, and the cover has 185 pixels between its margins, so a
+// line of n letters fits when n * 0.72 * size <= 185, or size <= 257 / n.
+func titleFontSize(lines []string) int {
+	longest := 1
+	for _, line := range lines {
+		longest = max(longest, len(line))
+	}
+	return max(14, min(30, 257/longest))
 }
 
 // wrapWords splits text into lines of at most maxLen characters, breaking

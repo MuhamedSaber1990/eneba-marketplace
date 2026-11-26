@@ -71,3 +71,25 @@ func TestEscapeLike(t *testing.T) {
 		})
 	}
 }
+
+func TestTitleFontSize(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+		want  int
+	}{
+		{"short lines get the full size", []string{"Ashen", "Crown"}, 30},
+		{"eight letters still fit at full size", []string{"Frontier"}, 30},
+		{"a ten-letter word is drawn smaller", []string{"Witchlight", "Academy"}, 25},
+		{"the longest line decides", []string{"Kart", "Thunderstorm"}, 21},
+		{"very long words stop shrinking at 14", []string{"Supercalifragilisticexpialidocious"}, 14},
+		{"no lines does not divide by zero", []string{}, 30},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := titleFontSize(tt.lines); got != tt.want {
+				t.Errorf("titleFontSize(%q) = %d, want %d", tt.lines, got, tt.want)
+			}
+		})
+	}
+}
