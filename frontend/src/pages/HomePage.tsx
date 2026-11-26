@@ -1,69 +1,59 @@
-import { useEffect, useState } from 'react'
+import { type ComponentType, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getHealth, type Health } from '../api/health'
-import './HomePage.css'
-
-// What the status panel can be showing.
-type HealthState = { phase: 'loading' } | { phase: 'loaded'; health: Health } | { phase: 'failed' }
+import { getHomeLayout } from '../api/home'
+import { BannerBlock } from '../blocks/BannerBlock'
+import type { BlockProps } from '../blocks/BlockSection'
+import { DealsBlock } from '../blocks/DealsBlock'
+import { PlatformsBlock } from '../blocks/PlatformsBlock'
+import { BestSellersBlock, ProductRowBlock } from '../blocks/ProductRowBlock'
+import { useAsync } from '../lib/useAsync'
+import '../blocks/blocks.css'
 
 /**
- * Phase 1 homepage: a placeholder that proves the frontend, the Go API and
- * the database are connected. Phase 3 replaces it with blocks loaded from
- * the backend.
+ * Which component draws which block type. This map is the only thing the
+ * frontend decides about the homepage. Which blocks appear, their order,
+ * their headings and their content all come from the backend.
  */
+const BLOCK_COMPONENTS: Record<string, ComponentType<BlockProps>> = {
+  banner: BannerBlock,
+  deals: DealsBlock,
+  best_sellers: BestSellersBlock,
+  new_releases: ProductRowBlock,
+  platforms: PlatformsBlock,
+}
+
 export function HomePage() {
-  const [state, setState] = useState<HealthState>({ phase: 'loading' })
+  const layout = useAsync(getHomeLayout, 'home-layout')
 
   useEffect(() => {
-    // AbortController cancels the request if the page is left before it ends.
-    const controller = new AbortController()
-    getHealth(controller.signal)
-      .then((health) => setState({ phase: 'loaded', health }))
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
-          console.error(error)
-          setState({ phase: 'failed' })
-        }
-      })
-    return () => controller.abort()
+    document.title = 'Keybay: digital game keys'
   }, [])
 
   return (
     <div className="container home">
-      <h1 className="section-heading">Digital game keys, from many sellers</h1>
-      <p className="home__lead">
-        The shop is being built. The catalog, search and checkout arrive in the next phases.
-      </p>
-      <Link to="/store" className="button">
-        Browse the store
-      </Link>
+      <h1 className="visually-hidden">Keybay: digital game keys from many sellers</h1>
 
-      <section className="panel home__status" aria-live="polite">
-        <h2>System status</h2>
-        <StatusRows state={state} />
-      </section>
+      {layout.status === 'loading' && <div className="banners banners--loading" aria-hidden="true" />}
+
+      {layout.status === 'error' && (
+        <div className="panel">
+          <p>The homepage could not be loaded. The store is still there.</p>
+          <p>
+            <Link to="/store" className="home-block__see-all">
+              Go to the store
+            </Link>
+          </p>
+        </div>
+      )}
+
+      {layout.status === 'ready' &&
+        layout.data.map((block) => {
+          const Block = BLOCK_COMPONENTS[block.type]
+          // A block type this version of the frontend does not know is skipped.
+          if (!Block) return null
+          // Two blocks can share a type, so the key includes the endpoint.
+          return <Block key={`${block.type}:${block.endpoint}:${block.title}`} block={block} />
+        })}
     </div>
-  )
-}
-
-function StatusRows({ state }: { state: HealthState }) {
-  if (state.phase === 'loading') {
-    return <p>Checking the API…</p>
-  }
-  if (state.phase === 'failed') {
-    return <p className="home__bad">The API did not answer.</p>
-  }
-  const { health } = state
-  return (
-    <dl>
-      <div>
-        <dt>API</dt>
-        <dd className="home__good">reachable</dd>
-      </div>
-      <div>
-        <dt>Database</dt>
-        <dd className={health.database === 'ok' ? 'home__good' : 'home__bad'}>{health.database}</dd>
-      </div>
-    </dl>
   )
 }

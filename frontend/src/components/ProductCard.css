@@ -1,4 +1,8 @@
 .product-card {
+  /* Screen-reader-only text inside a card ("Rank", "Was") is absolutely
+     positioned. Without this it would be placed relative to the page and,
+     inside a sideways-scrolling row, stretch the page past the screen. */
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--color-panel);
@@ -14,6 +18,29 @@
   height: auto;
   aspect-ratio: 3 / 4;
   object-fit: cover;
+}
+
+/* Holds the cover and any badge placed on top of it. */
+.product-card__media {
+  position: relative;
+}
+
+.product-card__badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 32px;
+  padding: 6px 8px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-heavy);
+  line-height: 1;
+  text-align: center;
+}
+
+.product-card__badge--deal {
+  background: var(--color-mint);
 }
 
 .product-card__body {

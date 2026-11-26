@@ -4,8 +4,9 @@ import { defineConfig } from 'vite'
 
 // In development the Go API runs on port 8080 (go run ./cmd/server).
 // Forwarding /api to it means the frontend uses the same relative URLs
-// locally and on Vercel, where both live on one domain.
-const apiProxy = { '/api': 'http://localhost:8080' }
+// locally and on Vercel, where both live on one domain. Set API_URL to
+// point at an API on another port, for example when 8080 is taken.
+const apiProxy = { '/api': process.env.API_URL ?? 'http://localhost:8080' }
 
 // The security headers are defined once, in vercel.json, because Vercel is
 // what sends them in production. They are read here so that `npm run preview`
