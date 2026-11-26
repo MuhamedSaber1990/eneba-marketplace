@@ -1,0 +1,37 @@
+import { Outlet, Route, Routes } from 'react-router-dom'
+import { Footer } from './components/Footer'
+import { Header } from './components/Header'
+import { HomePage } from './pages/HomePage'
+import { PlaceholderPage } from './pages/PlaceholderPage'
+
+/** Header and footer around whichever page matches the URL (the Outlet). */
+function Layout() {
+  return (
+    <>
+      <a href="#main" className="skip-link">
+        Skip to content
+      </a>
+      <Header />
+      <main id="main">
+        <Outlet />
+      </main>
+      <Footer />
+    </>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/store" element={<PlaceholderPage title="Store" note="The catalog arrives in phase 2." />} />
+        <Route path="/search" element={<PlaceholderPage title="Search" note="Search arrives in phase 4." />} />
+        <Route path="/signin" element={<PlaceholderPage title="Log in" note="Accounts arrive in phase 5." />} />
+        <Route path="/signup" element={<PlaceholderPage title="Register" note="Accounts arrive in phase 5." />} />
+        <Route path="/cart" element={<PlaceholderPage title="Cart" note="The cart arrives in phase 6." />} />
+        <Route path="*" element={<PlaceholderPage title="Page not found" note="There is nothing at this address." />} />
+      </Route>
+    </Routes>
+  )
+}

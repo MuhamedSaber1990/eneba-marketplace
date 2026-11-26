@@ -1,0 +1,57 @@
+/*
+ * Design tokens. Every value was measured from eneba.com's computed styles
+ * and is documented in docs/design-reference.md. Components use these
+ * variables and never write a raw color or size.
+ */
+:root {
+  /* Colors */
+  --color-page: #4618ac;
+  --color-panel: #1f0a4d; /* card text area */
+  --color-panel-raised: #351183; /* description boxes */
+  --color-accent: #7a4edf;
+  --color-primary: #fad318; /* main button */
+  --color-on-primary: #000000;
+  --color-mint: #63e3c2;
+  --color-region: #23c299;
+  --color-danger: #eb002e;
+  --color-text: #ffffff;
+  --color-text-soft: rgba(255, 255, 255, 0.85);
+  --color-text-nav: #dcd8e6;
+  --color-text-muted: #b3aac9;
+  --color-overlay: rgba(0, 0, 0, 0.55);
+  --color-input: rgba(0, 0, 0, 0.2);
+  --color-footer: rgba(0, 0, 0, 0.7);
+
+  /* Typography */
+  --font-family: 'Metropolis', Arial, Helvetica, sans-serif;
+  --font-regular: 400;
+  --font-semibold: 600;
+  --font-bold: 700;
+  --font-heavy: 800;
+  --text-xs: 0.75rem; /* 12px: card titles, labels */
+  --text-sm: 0.875rem; /* 14px: header links */
+  --text-button: 0.9375rem; /* 15px */
+  --text-base: 1rem; /* 16px */
+  --text-price: 1.1rem; /* 17.6px */
+  --text-search: 1.1875rem; /* 19px */
+  --text-title: 1.625rem; /* 26px: product title */
+  --text-heading: 1.875rem; /* 30px: section headings */
+
+  /* Layout */
+  --content-width: 1200px;
+  --page-padding: 20px;
+  --gap: 20px;
+  --space-1: 5px;
+  --space-2: 10px;
+  --space-3: 20px;
+  --space-4: 30px;
+  --space-5: 50px;
+  --radius: 0; /* Eneba uses square corners everywhere */
+  --border-thin: 0.8px solid var(--color-text);
+
+  /* Component sizes */
+  --header-row: 57px;
+  --nav-row: 50px;
+  --button-height: 35px;
+  --touch-target: 44px; /* minimum size for a finger on phones */
+}

@@ -1,0 +1,44 @@
+.home {
+  padding-top: var(--space-4);
+}
+
+.home__lead {
+  max-width: 60ch;
+  margin-bottom: var(--space-3);
+  color: var(--color-text-soft);
+}
+
+.home__status {
+  max-width: 420px;
+  margin-top: var(--space-5);
+}
+
+.home__status h2 {
+  font-size: 1.125rem;
+  font-weight: var(--font-bold);
+  margin-bottom: var(--space-2);
+}
+
+.home__status dl {
+  margin: 0;
+}
+
+.home__status dl div {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1) 0;
+}
+
+.home__status dd {
+  margin: 0;
+  font-weight: var(--font-heavy);
+}
+
+.home__good {
+  color: var(--color-mint);
+}
+
+/* Yellow, not the red token: red on this purple fails the contrast minimum. */
+.home__bad {
+  color: var(--color-primary);
+}

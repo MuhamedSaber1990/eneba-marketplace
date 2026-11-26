@@ -1,0 +1,155 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--text-base);
+  font-weight: var(--font-regular);
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+  border-radius: var(--radius);
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* A visible focus ring for keyboard users, in the brand yellow. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* The 1200px column every page section sits in. */
+.container {
+  width: 100%;
+  max-width: calc(var(--content-width) + 2 * var(--page-padding));
+  margin: 0 auto;
+  padding: 0 var(--page-padding);
+}
+
+.section-heading {
+  font-size: var(--text-heading);
+  font-weight: var(--font-bold);
+  line-height: 1.25;
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+/* Buttons. Links styled as buttons use the same classes. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--button-height);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-button);
+  font-weight: var(--font-heavy);
+  line-height: 1;
+  cursor: pointer;
+  transition: filter 150ms ease;
+}
+
+.button:hover {
+  filter: brightness(1.08);
+}
+
+.button--secondary {
+  background: transparent;
+  color: var(--color-text);
+  border: var(--border-thin);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.panel {
+  background: var(--color-panel-raised);
+  padding: var(--space-3);
+}
+
+/* Hidden on screen, still read by screen readers (used for form labels). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Lets keyboard users jump past the header. Appears when focused. */
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -100px;
+  z-index: 10;
+  padding: var(--space-2);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: var(--font-heavy);
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}
+
+@media (max-width: 768px) {
+  .button {
+    min-height: var(--touch-target);
+  }
+
+  .section-heading {
+    font-size: var(--text-title);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
