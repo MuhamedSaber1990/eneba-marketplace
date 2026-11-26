@@ -88,12 +88,15 @@ func TestParseListParams(t *testing.T) {
 	}
 }
 
-// Without a database, catalog routes must answer 503 in JSON and bad
-// parameters must still be reported, not crash on the missing pool.
-func TestCatalogRoutesWithoutDatabase(t *testing.T) {
+// Without a database, every route that needs one must answer 503 in JSON
+// instead of crashing on the missing pool.
+func TestRoutesWithoutDatabase(t *testing.T) {
 	router := NewRouter(nil)
 
-	for _, path := range []string{"/api/products", "/api/products/some-slug", "/api/products/some-slug/cover.svg", "/api/filters"} {
+	for _, path := range []string{
+		"/api/products", "/api/products/some-slug", "/api/products/some-slug/cover.svg", "/api/filters",
+		"/api/home", "/api/home/banners", "/api/home/deals", "/api/home/best-sellers", "/api/home/new-releases", "/api/home/platforms",
+	} {
 		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))

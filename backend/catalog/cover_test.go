@@ -29,7 +29,7 @@ func TestWrapWords(t *testing.T) {
 }
 
 func TestRenderSVG(t *testing.T) {
-	cover := Cover{Name: "Ashen Crown Steam Key GLOBAL", Platform: "Steam", ColorA: "#ff5f6d", ColorB: "#ffc371"}
+	cover := Cover{Name: "Ashen Crown Steam Key GLOBAL", Title: "Ashen Crown", Platform: "Steam", ColorA: "#ff5f6d", ColorB: "#ffc371"}
 	svg := cover.RenderSVG()
 
 	for _, want := range []string{"<svg ", "</svg>", "ASHEN CROWN", "STEAM", "#ff5f6d", "#ffc371"} {
@@ -37,15 +37,18 @@ func TestRenderSVG(t *testing.T) {
 			t.Errorf("SVG does not contain %q", want)
 		}
 	}
-	// Only the title goes on the cover, not the "Key GLOBAL" part of the name.
-	if strings.Contains(svg, ">ASHEN CROWN STEAM") {
-		t.Errorf("the platform leaked into the title")
+	// The full name is the image's description, but only the title is drawn.
+	if !strings.Contains(svg, `aria-label="Ashen Crown Steam Key GLOBAL"`) {
+		t.Errorf("the image has no description with the full name")
+	}
+	if strings.Contains(svg, "GLOBAL</text>") {
+		t.Errorf("the region was drawn on the cover")
 	}
 }
 
 // Text from the database must not be able to add markup to the image.
 func TestRenderSVGEscapesText(t *testing.T) {
-	cover := Cover{Name: `<script>alert(1)</script> Steam Key GLOBAL`, Platform: "Steam", ColorA: `"><script>`, ColorB: "#000"}
+	cover := Cover{Name: `<script>alert(1)</script> Steam Key GLOBAL`, Title: `<script>alert(1)</script>`, Platform: "Steam", ColorA: `"><script>`, ColorB: "#000"}
 	svg := cover.RenderSVG()
 
 	if strings.Contains(svg, "<script>") || strings.Contains(svg, "<SCRIPT>") {

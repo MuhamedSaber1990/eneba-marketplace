@@ -84,13 +84,18 @@ func ValidSort(name string) bool {
 	return ok
 }
 
-// pricedProducts gives every product two computed columns:
+// PricedProducts is the start of every query that shows products with a
+// price. It defines "priced": every product plus two computed columns.
 //   - from_price_cents: the lowest price among its offers that still have an
 //     available key, or NULL when none do
 //   - offer_count: how many sellers offer it
-const pricedProducts = `
+//
+// It is exported (capital P) because the homepage blocks in package home
+// build on the same definition, so "the price of a product" means one thing
+// everywhere.
+const PricedProducts = `
 WITH priced AS (
-    SELECT p.slug, p.name, p.platform, p.region, p.genre, p.release_date,
+    SELECT p.id, p.slug, p.title, p.name, p.platform, p.region, p.genre, p.release_date,
            (SELECT MIN(o.price_cents)
               FROM offers o
              WHERE o.product_id = p.id
@@ -100,6 +105,27 @@ WITH priced AS (
            (SELECT COUNT(*) FROM offers o WHERE o.product_id = p.id) AS offer_count
       FROM products p
 )`
+
+// SummaryColumns are the columns of "priced" that make up a ProductSummary,
+// in the order ScanSummary reads them.
+const SummaryColumns = `slug, name, platform, region, genre,
+       to_char(release_date, 'YYYY-MM-DD'), from_price_cents, offer_count`
+
+// ScanSummary reads one row selected with SummaryColumns. Extra columns
+// selected after them can be read by passing where to put them.
+//
+// The parameter is "anything with a Scan method", which both a single row and
+// a row inside a loop have. That is an interface: it names the behavior
+// needed and not a concrete type.
+func ScanSummary(row interface{ Scan(dest ...any) error }, extra ...any) (ProductSummary, error) {
+	var p ProductSummary
+	dest := []any{&p.Slug, &p.Name, &p.Platform, &p.Region, &p.Genre, &p.ReleaseDate, &p.FromPriceCents, &p.OfferCount}
+	if err := row.Scan(append(dest, extra...)...); err != nil {
+		return ProductSummary{}, err
+	}
+	p.CoverURL = CoverURL(p.Slug)
+	return p, nil
+}
 
 // listFilter always has the same five parameters. A filter that is not in use
 // is passed as an empty array, an empty string or NULL, and its line then
@@ -131,15 +157,14 @@ func (s *Store) List(ctx context.Context, params ListParams) (ListResult, error)
 
 	// First query: how many products match in total, for the pager.
 	var total int
-	err := s.db.QueryRow(ctx, pricedProducts+" SELECT COUNT(*) FROM priced"+listFilter, filterArgs...).Scan(&total)
+	err := s.db.QueryRow(ctx, PricedProducts+" SELECT COUNT(*) FROM priced"+listFilter, filterArgs...).Scan(&total)
 	if err != nil {
 		return ListResult{}, fmt.Errorf("counting products: %w", err)
 	}
 
 	// Second query: the rows of the requested page.
-	pageQuery := pricedProducts + `
-		SELECT slug, name, platform, region, genre,
-		       to_char(release_date, 'YYYY-MM-DD'), from_price_cents, offer_count
+	pageQuery := PricedProducts + `
+		SELECT ` + SummaryColumns + `
 		  FROM priced` + listFilter + `
 		 ORDER BY ` + orderBy + `
 		 LIMIT $6 OFFSET $7`
@@ -152,13 +177,10 @@ func (s *Store) List(ctx context.Context, params ListParams) (ListResult, error)
 
 	items := []ProductSummary{} // not nil, so an empty page is [] in JSON
 	for rows.Next() {
-		var p ProductSummary
-		err := rows.Scan(&p.Slug, &p.Name, &p.Platform, &p.Region, &p.Genre,
-			&p.ReleaseDate, &p.FromPriceCents, &p.OfferCount)
+		p, err := ScanSummary(rows)
 		if err != nil {
 			return ListResult{}, fmt.Errorf("reading a product row: %w", err)
 		}
-		p.CoverURL = coverURL(p.Slug)
 		items = append(items, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -209,7 +231,7 @@ func (s *Store) Get(ctx context.Context, slug string) (ProductDetail, error) {
 	if err != nil {
 		return ProductDetail{}, fmt.Errorf("loading product %q: %w", slug, err)
 	}
-	detail.CoverURL = coverURL(detail.Slug)
+	detail.CoverURL = CoverURL(detail.Slug)
 
 	rows, err := s.db.Query(ctx, `
 		SELECT id, seller_name, seller_rating, seller_sales_count, price_cents, stock
@@ -274,7 +296,8 @@ func (s *Store) Filters(ctx context.Context) (Filters, error) {
 
 // Cover is what is needed to draw a product's cover image.
 type Cover struct {
-	Name     string
+	Name     string // the full product name, used as the image's description
+	Title    string // the game's title, drawn on the cover
 	Platform string
 	ColorA   string
 	ColorB   string
@@ -283,8 +306,8 @@ type Cover struct {
 func (s *Store) Cover(ctx context.Context, slug string) (Cover, error) {
 	var c Cover
 	err := s.db.QueryRow(ctx,
-		"SELECT name, platform, cover_color_a, cover_color_b FROM products WHERE slug = $1", slug,
-	).Scan(&c.Name, &c.Platform, &c.ColorA, &c.ColorB)
+		"SELECT name, title, platform, cover_color_a, cover_color_b FROM products WHERE slug = $1", slug,
+	).Scan(&c.Name, &c.Title, &c.Platform, &c.ColorA, &c.ColorB)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Cover{}, ErrNotFound
 	}
@@ -294,7 +317,8 @@ func (s *Store) Cover(ctx context.Context, slug string) (Cover, error) {
 	return c, nil
 }
 
-func coverURL(slug string) string {
+// CoverURL is the address of a product's generated cover image.
+func CoverURL(slug string) string {
 	return "/api/products/" + slug + "/cover.svg"
 }
 

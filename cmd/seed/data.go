@@ -87,3 +87,34 @@ var coverColors = [][2]string{
 	{"#8e2de2", "#4a00e0"},
 	{"#ee0979", "#ff6a00"},
 }
+
+// The homepage layout: which blocks, in what order, under what heading.
+type layoutBlock struct {
+	blockType string
+	title     string
+	seeAllURL string
+}
+
+var homeLayout = []layoutBlock{
+	{"banner", "", ""},
+	{"deals", "Deals", ""},
+	{"best_sellers", "Best sellers", "/store"},
+	{"new_releases", "New releases", "/store?sort=newest"},
+	{"platforms", "Browse by platform", ""},
+}
+
+type banner struct {
+	title    string
+	subtitle string
+	ctaLabel string
+	link     string
+	colorA   string
+	colorB   string
+}
+
+// The first banner is the large one.
+var banners = []banner{
+	{"Keys from many sellers, one low price", "Compare every offer for a game and pick the one you like. Up to 40% off selected titles.", "Browse the store", "/store?sort=price_asc", "#7a4edf", "#23c299"},
+	{"Fresh releases", "The newest games in the catalog.", "See what is new", "/store?sort=newest", "#fc466b", "#3f5efb"},
+	{"Play on Switch", "Keys for Nintendo Switch.", "Shop Nintendo", "/store?platform=Nintendo+Switch", "#f7971e", "#c31432"},
+}

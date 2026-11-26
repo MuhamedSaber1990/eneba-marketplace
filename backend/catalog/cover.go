@@ -18,10 +18,8 @@ const (
 // The product is invented, so there is no artwork to use. Drawing the cover
 // from data keeps every product looking finished without any image files.
 func (c Cover) RenderSVG() string {
-	// The product name ends with "<platform> Key <REGION>". Only the title
-	// part goes on the cover, the platform has its own strip.
-	title, _, _ := strings.Cut(c.Name, " "+c.Platform+" Key ")
-	lines := wrapWords(title, 11)
+	// Only the game's title goes on the cover. The platform has its own strip.
+	lines := wrapWords(c.Title, 11)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="%s">`,
