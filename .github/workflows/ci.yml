@@ -1,0 +1,109 @@
+# Checks that run on GitHub for every push and every pull request.
+#
+# This is a signal, not a gate: Vercel deploys each push to main on its own
+# and does not wait for these jobs. A failed run shows a red mark on the
+# commit. See DECISIONS.md, entry 28.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The jobs only need to read the code. No secrets are used anywhere.
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run of the older one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Go API
+    runs-on: ubuntu-latest
+
+    # A throwaway PostgreSQL that lives only for this job. It starts empty,
+    # so the steps below prove that the migrations and the seed work from
+    # nothing. Version 18 matches the Neon database.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: keybay
+        ports:
+          - 5432:5432
+        # Wait until the database accepts connections before the steps start.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    # Both variables point at the same local database: there is no pooler
+    # here. The password is the container's own and guards nothing.
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/keybay?sslmode=disable
+      DATABASE_URL_UNPOOLED: postgres://postgres:postgres@localhost:5432/keybay?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod # the same Go version the project declares
+
+      - name: Formatting (gofmt)
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Suspicious code (go vet)
+        run: go vet ./...
+
+      # Compares our dependencies with Go's vulnerability database and
+      # reports only the flaws our code can actually reach.
+      - name: Known vulnerabilities (govulncheck)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: Create the schema (migrate)
+        run: go run ./cmd/migrate
+
+      - name: Fill the catalog (seed)
+        run: go run ./cmd/seed
+
+      - name: Tests
+        run: go test ./...
+
+  frontend:
+    name: React app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci installs exactly what package-lock.json lists and fails if the
+      # lock file and package.json disagree.
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # The build runs the TypeScript compiler first, so type errors fail here.
+      - name: Type-check and build
+        run: npm run build
