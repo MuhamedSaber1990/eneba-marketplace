@@ -173,7 +173,8 @@ plus the foreign keys used in listings.
 | POST `/api/orders` | yes | creates the order, reserves keys, returns a payment URL |
 | GET `/api/orders`, `/api/orders/{id}` | yes | history; keys shown only when paid and owned |
 | POST `/api/orders/{id}/pay` | yes | simulated payment: approve or decline |
-| POST `/api/stripe/webhook` | signature | marks the order paid and the keys sold |
+| POST `/api/orders/{id}/checkout` | yes | Stripe mode: returns the address of Stripe's payment page |
+| POST `/api/stripe/webhook` | signature | Stripe mode: marks the order paid and the keys sold, or refunds |
 
 ## Homepage blocks
 

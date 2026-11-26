@@ -81,13 +81,30 @@ already registered says so, which does reveal that the account exists.
 ## Buying something
 
 Add an offer to the cart from a product page, go to checkout (you will be
-asked to sign in), place the order and pay. Payment is simulated: the order
-page has a "Pay (test)" button and a "Simulate a declined card" button. No
-card is asked for and no money moves. After paying, the keys are on the
+asked to sign in), place the order and pay. After paying, the keys are on the
 order page and stay in your order history.
 
-- Placing an order holds its keys for 15 minutes. If it is not paid by then,
-  it expires and the keys go back on sale.
+**On the live site you pay through Stripe in test mode.** No real money
+moves. On Stripe's page choose "Card" and use:
+
+| Card number | What happens |
+|---|---|
+| `4242 4242 4242 4242` | the payment succeeds |
+| `4000 0000 0000 0002` | the card is declined |
+
+Any future expiry date, any three digits and any name work. Back on the
+order page it says "Confirming your payment" for a few seconds, then shows
+the keys.
+
+**Run locally, payment is simulated** unless you set up Stripe: the order
+page has a "Pay (test)" button and a "Simulate a declined card" button.
+
+- Placing an order holds its keys for 15 minutes. Going to Stripe's page
+  extends that to 36 minutes, because Stripe keeps a payment page open for at
+  least 30. If the order is not paid by then, it expires and the keys go
+  back on sale.
+- A payment that arrives after its order has expired is refunded
+  automatically.
 - A key cannot be sold twice. The tests that check this start 20 buyers at
   the same instant against a real database (`backend/checkout/`).
 - If someone else is holding the last key in an unpaid order, you are told
@@ -169,7 +186,7 @@ cmd/server/       entry point for local runs and for Render
 cmd/migrate/      applies the .sql files in migrations/
 cmd/seed/         fills the database with invented products
 migrations/       the database schema, one file per step
-backend/          the API: config, database pool, catalog, homepage, accounts, checkout, HTTP routes
+backend/          the API: config, database pool, catalog, homepage, accounts, checkout, Stripe, HTTP routes
 frontend/         React app (Vite)
 docs/             chat log and design reference
 ```

@@ -871,3 +871,123 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **Two payments for the same offer at the same moment** could both top it
   up, adding 10 keys where 5 were meant. That is harmless here.
 
+## 68. Stripe's hosted Checkout, with fulfilment only in the webhook
+
+- **Alternatives:** Stripe's embedded card form; fulfilling on the page the
+  buyer returns to.
+- **Why hosted:** Stripe shows the payment page, so no card data reaches this
+  application, and there is no Stripe script on our pages. The
+  Content-Security-Policy did not need a single change: going to Stripe is a
+  full-page navigation.
+- **Why the webhook:** a buyer can pay and then lose their connection, or
+  close the tab, before the return page loads. So the return page fulfils
+  nothing. Stripe's message to `POST /api/stripe/webhook` does, by calling
+  the same fulfilment step as the simulated payment (`markPaid`). The order
+  page meanwhile shows "Confirming your payment" and asks every two seconds
+  until the order has left `pending`.
+- **Only "paid" is fulfilled.** `checkout.session.completed` means the buyer
+  finished the page, not that money arrived. With payment methods that
+  confirm later the session is still `unpaid` at that point. The handler
+  fulfils on `payment_status: paid` and also listens for
+  `checkout.session.async_payment_succeeded`.
+
+## 69. The webhook's only protection is its signature, so that is tested hard
+
+- **Why no cookie and no Origin check:** it is called by Stripe's servers,
+  not by a browser.
+- **What protects it:** Stripe signs each request with a secret that only
+  Stripe and this server know, over the exact bytes of the body and the time
+  it was sent. `payments.ParseWebhook` verifies that with Stripe's library
+  and refuses anything else.
+- **Tests, with no Stripe account needed:** Stripe's library can sign a test
+  payload with a secret of our choosing. A correct signature is accepted. No
+  signature, a signature made with another secret, a body changed after
+  signing, a genuine request replayed ten minutes later, and an empty secret
+  on our side are all refused.
+- **The library's API-version check is switched off on purpose.** By default
+  it refuses events written for a different API version than its own. This
+  code reads six plain fields that are the same across versions, and leaving
+  the check on would mean a library update or a dashboard setting could stop
+  every payment from being fulfilled.
+- **The answer matters:** 200 tells Stripe the event was received, anything
+  else makes Stripe send it again. So a failure on our side answers 500 on
+  purpose, and an event we do not act on answers 200.
+
+## 70. A payment is fulfilled only if it matches the order, and refunded otherwise
+
+- **The checks, all under a lock on the order row:** the payment must be for
+  the order's own payment page, for its exact total, in euros, and the order
+  must still be pending and inside its deadline.
+- **Repeated messages:** an order that is already paid is left alone. Ten
+  deliveries of the same event at once fulfil it exactly once (tested).
+- **Money that cannot become keys is sent back.** If a payment arrives for
+  an order that has expired or failed, or does not match, the handler asks
+  Stripe for a full refund and records its id. A repeat of the message does
+  not refund twice: the order row is locked, `refund_ref` is checked, and the
+  refund request carries the order id as an idempotency key.
+- **Why refund and not "revive" the order:** the keys may already belong to
+  another buyer. Re-reserving would need its own rules for when it fails.
+  Returning the money is always possible and always right.
+- **A payment for an order id that does not exist** is answered 200 and
+  ignored. That is what happens to a test payment made against the dev
+  database when its webhook reaches the live site.
+
+## 71. Going to pay stretches the reservation to 36 minutes
+
+- **The constraint:** Stripe refuses a payment page that would close sooner
+  than 30 minutes after it is created (checked in Stripe's documentation).
+- **Changed from the plan:** I first proposed a 35-minute reservation for
+  every order in Stripe mode. That would have let abandoned orders hold
+  stock for 35 minutes without ever going to pay.
+- **What was built:** a new order still holds its keys for 15 minutes. When
+  the buyer clicks through to Stripe, the page is created to close after 31
+  minutes and the order's deadline moves to 36 minutes from that moment. The
+  5 minutes between are for Stripe's message to arrive. The extension
+  happens once per order.
+- **One payment page per order.** The page's address is stored on the order.
+  Clicking pay again, a double click, or coming back from Stripe all lead to
+  the same page, so there are never two open pages that could both be paid.
+  Creating the page also carries the order id as an idempotency key.
+
+## 72. Adaptive pricing is switched off
+
+- **Found by looking at Stripe's page:** it offered to charge in the
+  visitor's own currency, at Stripe's rate plus a 4% fee, and preselected
+  that. Paid that way, the amount and currency would not match the order's
+  euro total, and the payment would have been refunded as a mismatch.
+- **Fix:** `adaptive_pricing: {enabled: false}` when creating the page. The
+  buyer sees and pays the amount our site showed.
+- **Payment methods are left to Stripe,** as its guidance says: the page
+  offers cards and other methods it considers relevant.
+
+## 73. Two payment modes, and the unused one does not exist
+
+- **`PAYMENT_MODE`** is `simulated` (the default) or `stripe`.
+- **Routes are removed, not hidden.** In Stripe mode the simulated
+  `POST /api/orders/{id}/pay` answers 404, as if it were not there. Hiding a
+  button would not be enough: with that endpoint reachable, one request
+  would mark an order paid without any payment. In simulated mode the Stripe
+  routes answer 404 in the same way.
+- **Missing keys do not fall back to simulated.** If the mode is `stripe`
+  but a key or `APP_URL` is missing, paying is refused with a clear error.
+  A silent fallback would let anyone "pay" for free on a site meant to take
+  payment.
+- **Why keep simulated at all:** the tests and local development need no
+  Stripe account, and it is the fallback if Stripe gives trouble: one
+  environment variable switches the live site back.
+
+## 74. Stripe is behind a small interface, and only one package imports it
+
+- **`checkout.Gateway`** has two methods: create a payment page, refund a
+  payment. `backend/payments` implements it for Stripe. The checkout logic
+  and its tests never see Stripe's types.
+- **Why:** everything about what to do with a payment (match it, fulfil it,
+  refund it) can be tested with a fake gateway that records what it was
+  asked. Only the two real calls to Stripe need a network and a key, and
+  those were exercised by hand with a test card.
+- **`stripe-go` is the one new dependency.** It creates sessions, issues
+  refunds and verifies signatures. Signature verification written by hand is
+  the kind of code that is wrong in ways nobody notices.
+- **A restricted key** (`rk_test_...`) with write access to Checkout Sessions
+  and Refunds is enough, so a leaked key could do little.
+
