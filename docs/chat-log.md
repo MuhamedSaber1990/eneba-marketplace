@@ -984,3 +984,99 @@ The chat log is up to date and committed. It now includes the skills prompt and 
 Two questions from earlier are still open before phase 2:
 1. How to run migrations against production: `vercel env pull` into a temporary git-ignored file (my recommendation), or you run the commands yourself.
 2. Whether to add `DATABASE_URL_UNPOOLED` (the direct Neon string) to `.env` for the migrate and seed commands.
+
+### Prompt 7
+
+````text
+Back again, let's continue. Yes to DATABASE_URL_UNPOOLED, I already added it to .env with the direct string for the dev branch. Use it for migrate and seed, keep DATABASE_URL for the API.
+
+Before you start phase 2, read the neon-postgres and golang skills in .claude/skills, since they don't load on their own in this session. Do the same with the other skills when a phase needs them.
+
+Tell me your plan for phase 2 and how you want to run migrations on production, then wait for my ok. Don't push without asking.
+````
+
+### Reply 12
+
+I read the neon-postgres skill and the four Go skills (code style, database, error handling, testing) and checked `.env`: it has `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct). Here is the plan for phase 2. Nothing is built yet.
+
+## What the skills change, and what they don't
+
+**I will follow:**
+- Migrations and seed over the direct connection, the API over the pooled one (neon).
+- Test each migration on `dev`, which is a branch of production, before applying it to `main` (neon).
+- Parameterized queries only, and an allowlist for the sort column so no user text reaches the SQL (database).
+- `context` on every query, rows closed, "not found" told apart from real errors (database).
+- Errors wrapped with context (`fmt.Errorf("listing products: %w", err)`), and either logged or returned, never both (error handling).
+- Early returns, empty slices instead of nil so JSON shows `[]` and not `null`, table-driven tests with named cases (code style, testing).
+
+**I will not follow, and why:**
+- "Use golang-migrate, never hand-rolled migrations." I recommend our own runner, about 70 lines of standard library that you can explain line by line. It is the one place I go against the skill, so it is your call (see below).
+- "Never let AI write schemas." The schema has to be written, so I'll explain every table and index in the summary and you review it before it reaches production.
+- testify, `samber/oops`, `slog`, `goleak`, build tags, sub-agents. They add dependencies or machinery the plan rules out.
+
+## Phase 2 scope
+
+**Database (migration `001_catalog.sql`)**
+- `products`: slug, name, description, platform, region, genre, release date, and two cover colors.
+- `sellers`: name, rating, sales count.
+- `offers`: one seller's price for one product, unique per (product, seller).
+- `keys`: one row per key, with a status. Stock for an offer is its count of available keys.
+- Indexes on the foreign keys and on the filter columns.
+- Later phases add their own files (`002_home`, `003_search`, and so on) instead of one big schema up front. That way each phase shows a real migration.
+
+**Commands**
+- `go run ./cmd/migrate`: applies new `.sql` files in name order, each in a transaction, and records them in a `schema_migrations` table. No "down" migrations.
+- `go run ./cmd/seed`: about 60 invented games, 8 sellers, 2 to 5 offers per product, 0 to 15 keys per offer (so some offers are sold out). It uses a fixed random seed, so `dev` and production get the same data. It refuses to run on a database that already has products unless given `-reset`.
+
+**API**
+- `GET /api/products`: filters `platform`, `region` (several values each), `min_price`, `max_price`, name search `q`, `sort` (price up, price down, newest, name), `page`. Returns the items plus the total count.
+- `GET /api/products/{slug}`: details and all offers, cheapest first, with seller rating and stock.
+- `GET /api/filters`: the platforms and regions that exist and the price range, so the filter panel is not hardcoded.
+- `GET /api/products/{slug}/cover.svg`: the generated cover, cacheable by the browser.
+
+**Frontend**
+- Store page: filter column, 4-column grid, sort menu, pagination. All state lives in the URL, so a filtered view can be shared or reloaded.
+- Product page: cover, details, and the offers table for comparing sellers.
+- Product card, price formatting, and loading, empty and error states.
+- The header's category links come from `/api/filters` instead of the fixed list.
+
+**Tests**
+- Without a database: parsing and validating query parameters, building the filter SQL.
+- With the `dev` database: listing, each filter, sorting, pagination, a missing product returning 404. These skip themselves when no database is configured.
+
+## Decisions I made, tell me if you disagree
+
+- **"Price" means the cheapest in-stock offer.** Filtering and sorting by price use that number, and the card shows "From €X". A product with no stock shows "Sold out" and sorts last.
+- **Covers are served as images from their own endpoint**, not embedded in the product JSON. The plan said a `cover_svg` column. Sending SVG text with every listing would make each page of results several times larger, and an image URL lets the browser cache it.
+- **Name search in this phase is plain "contains".** Typo tolerance arrives in phase 4, on the same endpoint.
+- **The product page has no "Add to cart" button yet.** The cart is phase 6, and I'd rather not ship a dead button.
+- **Platform and region are text columns**, not lookup tables. Four platforms and three regions do not justify extra joins.
+
+## One choice for you: the migration tool
+
+1. **Our own small runner (my recommendation).** No new dependency, and you can explain exactly what happens. Limits: no rollbacks, no locking against two people migrating at once. Neither matters for one developer.
+2. **golang-migrate.** What the skill recommends and what a team would use. It is one more dependency and a tool whose internals you would have to describe second-hand.
+
+## Migrations on production
+
+Two things changed since I proposed `vercel env pull`: migrations now need the direct string, and Vercel only holds the pooled one. So I suggest this instead:
+
+- You create a git-ignored file `~/eneba-marketplace/.env.production` with one line, `DATABASE_URL_UNPOOLED=` and the direct string of the `main` branch. `.gitignore` already covers it.
+- The migrate and seed commands take a flag for which env file to read: `go run ./cmd/migrate -env .env.production`.
+- I never print the value. The commands print only the host's endpoint name, so we can see which branch they are about to touch.
+
+**The order for every schema change, this phase and later:**
+1. Migrate and seed `dev`, run the tests, check the pages locally.
+2. Show you the summary and the SQL. You approve.
+3. I run migrate (and seed, the first time) on production. I ask before each production run.
+4. I ask before pushing. The push deploys the code that needs the new tables, so it has to come after step 3.
+
+As far as I know, a Neon branch inherits its parent's roles and passwords, so the production file would hold the same password `.env` already has. I have not verified that for your project. If you would rather not keep the file, the alternative is that you run the two commands yourself each time.
+
+## What I need from you
+
+1. Ok to start phase 2.
+2. Migration tool: own runner or golang-migrate.
+3. Production: create `.env.production` as described, or tell me you prefer to run those commands yourself.
+
+There are two unpushed commits, both chat log updates. I will not push until you say so.
