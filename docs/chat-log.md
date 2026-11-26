@@ -1764,3 +1764,78 @@ It still runs the phase 2 code. The store works and already shows the 8 lowered 
 2. run CI, including the new frontend test step for the first time.
 
 Afterwards I will check on the live URL: the five blocks and their order, covers and fonts, the security headers and policy violations, the phone layout with a screenshot, and whether repeat requests to the homepage endpoints are answered from Vercel's edge cache. I will report the CI result per job.
+
+### Prompt 16
+
+````text
+Yes, push it. Then do the live checks you listed and tell me the CI result. Send me the phone screenshot path so I can look at it too.
+````
+
+### Reply 21
+
+Pushed and deployed. CI passed and every live check passed. Phase 3 is live.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app
+- **Phone screenshot:** `C:\Users\User\Downloads\keybay-home-phone.png`
+
+## CI
+
+Both jobs passed.
+
+**React app**
+- Install, lint and build passed.
+- The new "Unit tests" step ran for the first time and passed (2 test files).
+
+**Go API**
+- Formatting, `go vet` and `govulncheck` passed ("No vulnerabilities found").
+- On the empty Postgres container, `migrate` applied `001_catalog.sql` and `002_home.sql`, and `seed` filled both sections: 56 products, 8 sellers, 173 offers and 1,247 keys, then 5 layout blocks, 3 banners, 56 sales rows and 8 deals.
+- The tests passed for all three packages, including the new homepage tests.
+
+## Live checks
+
+**The homepage, at 1440px and at 375px**
+- Five blocks in the order the API gives: 3 banners, 6 deals, 6 best sellers, 6 new releases, 4 platform tiles.
+- All 18 covers load and all four font weights load.
+- The banner gradient uses the colors from the database.
+- No sideways scroll at either width.
+- Zero policy violations, zero console errors, zero failed requests.
+
+**Best sellers**
+- Six different games: Quiet Harbor, Thunder Circuit Kart, Obsidian Vow, Rogue Meridian, Mythforge Legends, Saltwind Pirates.
+
+**Deals**
+- The first card reads: -17%, Witchlight Academy, was €41.39, now €34.39, ends in 5d 16h.
+
+**Cover fix**
+- The "Witchlight Academy" cover is now drawn at size 25 where it was 30, and fits. The store page shows the same fix for "Mythforge Legends".
+
+**Security headers**
+- All four are still sent, plus HSTS.
+
+**Edge cache, the part I could not test before**
+- I requested each homepage endpoint three times. The first answer was a MISS and the next two were HITs, for all five block endpoints. `/api/home` was already a HIT, because the browser test had just loaded it.
+- `/api/products` is a MISS every time, which is right: it has no cache header, since its answer depends on the filters.
+- Vercel removes the `s-maxage` part before the response reaches the browser, so the browser only sees `max-age=0`. That is how it is meant to work.
+
+**Store**
+- Still shows 56 products.
+
+## Screenshots
+
+I looked at the phone homepage and the desktop store screenshots myself and they match what the checks report.
+
+Three screenshots of the live site are saved in the repository folder `docs/screenshots/`: `home-desktop.png`, `home-phone.png` and `store-desktop.png`. They will be useful for the README at the end. The copy in your Downloads folder is the phone one. The same file inside WSL is at:
+
+`\\wsl.localhost\Ubuntu-24.04\home\swardhunter\eneba-marketplace\docs\screenshots\home-phone.png`
+
+## One thing to know
+
+Returning visitors may see the old, clipped covers for up to a day, because browsers were told to keep a cover for 24 hours. A hard reload (Ctrl+F5) shows the new ones.
+
+## State
+
+- GitHub and the live site are at the same commit.
+- Two things are committed locally and not pushed: the screenshots and this chat log entry. They go out with the next push you approve.
+- Phases 1 to 3 are done. Next is phase 4, search: typo-tolerant and partial matching with PostgreSQL trigrams, suggestions in the header box from every page, a results page, and tests for the typo cases. It needs migration `003_search.sql` for the extension and its index.
+
+Tell me when to start phase 4. I will give you the plan first, as before.
