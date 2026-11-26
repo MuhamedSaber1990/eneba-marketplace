@@ -8,6 +8,7 @@ import (
 
 	"eneba-marketplace/backend/auth"
 	"eneba-marketplace/backend/catalog"
+	"eneba-marketplace/backend/checkout"
 	"eneba-marketplace/backend/home"
 )
 
@@ -22,11 +23,12 @@ type Config struct {
 // API carries what the handlers need. Handlers are methods on it, so they can
 // reach the database without global variables.
 type API struct {
-	db      *pgxpool.Pool
-	config  Config
-	catalog *catalog.Store
-	home    *home.Store
-	auth    *auth.Store
+	db       *pgxpool.Pool
+	config   Config
+	catalog  *catalog.Store
+	home     *home.Store
+	auth     *auth.Store
+	checkout *checkout.Store
 }
 
 // NewRouter returns the handler for every /api route. The same router is used
@@ -36,11 +38,12 @@ type API struct {
 // and every other route answers 503 instead of crashing.
 func NewRouter(db *pgxpool.Pool, config Config) http.Handler {
 	api := &API{
-		db:      db,
-		config:  config,
-		catalog: catalog.NewStore(db),
-		home:    home.NewStore(db),
-		auth:    auth.NewStore(db),
+		db:       db,
+		config:   config,
+		catalog:  catalog.NewStore(db),
+		home:     home.NewStore(db),
+		auth:     auth.NewStore(db),
+		checkout: checkout.NewStore(db),
 	}
 
 	mux := http.NewServeMux()
@@ -67,6 +70,14 @@ func NewRouter(db *pgxpool.Pool, config Config) http.Handler {
 	mux.HandleFunc("POST /api/auth/signin", api.needsDB(sameOrigin(api.handleSignIn)))
 	mux.HandleFunc("POST /api/auth/signout", api.needsDB(sameOrigin(api.handleSignOut)))
 	mux.HandleFunc("GET /api/auth/me", api.needsDB(api.requireUser(api.handleMe)))
+
+	// Checkout. Pricing a cart is public. Everything about orders needs a
+	// signed-in user, and the POSTs must come from the site itself.
+	mux.HandleFunc("POST /api/cart/price", api.needsDB(sameOrigin(api.handlePriceCart)))
+	mux.HandleFunc("POST /api/orders", api.needsDB(sameOrigin(api.requireUser(api.handleCreateOrder))))
+	mux.HandleFunc("POST /api/orders/{id}/pay", api.needsDB(sameOrigin(api.requireUser(api.handlePayOrder))))
+	mux.HandleFunc("GET /api/orders", api.needsDB(api.requireUser(api.handleListOrders)))
+	mux.HandleFunc("GET /api/orders/{id}", api.needsDB(api.requireUser(api.handleGetOrder)))
 
 	// Anything else under /api is an unknown route. Answer in JSON, not with
 	// Go's plain-text 404, so the frontend can parse every response.

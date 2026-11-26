@@ -16,6 +16,14 @@ import (
 // request does not pay the cost of connecting. pgxpool connects lazily: this
 // function does not touch the network, the first query does.
 func Connect(ctx context.Context) (*pgxpool.Pool, error) {
+	// On Vercel every function instance has its own pool, and many instances
+	// can run at once. A small pool per instance keeps the total low.
+	return ConnectWithMaxConns(ctx, 4)
+}
+
+// ConnectWithMaxConns is Connect with a chosen pool size. The concurrency
+// tests use a larger pool, so that many transactions really run at once.
+func ConnectWithMaxConns(ctx context.Context, maxConns int32) (*pgxpool.Pool, error) {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		return nil, errors.New("DATABASE_URL is not set")
@@ -25,10 +33,7 @@ func Connect(ctx context.Context) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// On Vercel every function instance has its own pool, and many instances
-	// can run at once. A small pool per instance keeps the total low.
-	config.MaxConns = 4
+	config.MaxConns = maxConns
 
 	// Neon's pooled connection string goes through PgBouncer, which shares
 	// server connections between clients. pgx normally prepares a statement on

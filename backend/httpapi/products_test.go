@@ -97,7 +97,7 @@ func TestRoutesWithoutDatabase(t *testing.T) {
 
 	for _, path := range []string{
 		"/api/products", "/api/products/some-slug", "/api/products/some-slug/cover.svg", "/api/filters", "/api/search/suggest?q=kart",
-		"/api/auth/me", "/api/home", "/api/home/banners", "/api/home/deals", "/api/home/best-sellers", "/api/home/new-releases", "/api/home/platforms",
+		"/api/auth/me", "/api/orders", "/api/orders/x", "/api/home", "/api/home/banners", "/api/home/deals", "/api/home/best-sellers", "/api/home/new-releases", "/api/home/platforms",
 	} {
 		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()

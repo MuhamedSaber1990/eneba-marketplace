@@ -77,8 +77,17 @@ jobs:
       - name: Fill the catalog (seed)
         run: go run ./cmd/seed
 
+      # -race turns on Go's race detector: it watches the program's own
+      # memory while the tests run and fails if two goroutines touch the
+      # same variable without coordination. The checkout tests start many
+      # goroutines on purpose, so this is where it earns its keep.
+      #
+      # -p 1 runs one package's tests at a time. The packages share one
+      # database: the checkout tests add a temporary product while they run,
+      # and the catalog tests count products. Run together, one would see
+      # the other's rows.
       - name: Tests
-        run: go test ./...
+        run: go test -race -p 1 ./...
 
   frontend:
     name: React app

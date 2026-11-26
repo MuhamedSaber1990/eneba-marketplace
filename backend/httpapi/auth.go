@@ -23,9 +23,9 @@ const (
 	insecureCookieName = "session"
 )
 
-// maxAuthBodyBytes caps the size of a sign-up or sign-in request. An email
-// and a password fit in far less.
-const maxAuthBodyBytes = 4096
+// maxBodyBytes caps the size of a request body. An email and a password, or
+// a cart of ten lines, fit in far less.
+const maxBodyBytes = 8192
 
 type credentials struct {
 	Email    string `json:"email"`
@@ -135,24 +135,29 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// readCredentials decodes {"email": ..., "password": ...} from the request
-// body. It insists on JSON: a plain HTML form on another site cannot send
-// that content type, which is one more obstacle to forged requests.
-func readCredentials(w http.ResponseWriter, r *http.Request) (credentials, bool) {
-	var creds credentials
-
+// readJSON decodes the request body into dst. It insists on JSON: a plain
+// HTML form on another site cannot send that content type, which is one more
+// obstacle to forged requests. It reports false after writing an error.
+func readJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
 		writeError(w, http.StatusUnsupportedMediaType, "send the request as application/json")
-		return creds, false
+		return false
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		writeError(w, http.StatusBadRequest, "the request body is not valid JSON")
-		return creds, false
+		return false
 	}
-	return creds, true
+	return true
+}
+
+// readCredentials reads {"email": ..., "password": ...}.
+func readCredentials(w http.ResponseWriter, r *http.Request) (credentials, bool) {
+	var creds credentials
+	ok := readJSON(w, r, &creds)
+	return creds, ok
 }
 
 // writeAuthError turns an error from package auth into a response. It

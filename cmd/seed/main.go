@@ -14,7 +14,7 @@
 //
 //	go run ./cmd/seed                       (uses .env, the dev database)
 //	go run ./cmd/seed -env .env.production  (the production database)
-//	go run ./cmd/seed -reset                (delete all seed data first, then fill)
+//	go run ./cmd/seed -reset                (delete all seed data and all orders first, then fill)
 package main
 
 import (
@@ -60,8 +60,10 @@ func seed(ctx context.Context, conn *pgx.Conn, reset bool) error {
 
 	if reset {
 		// CASCADE also empties tables that point at these ones.
+		// Orders are emptied too: they point at the offers and keys being
+		// replaced, so they cannot outlive them.
 		_, err := tx.Exec(ctx, `
-			TRUNCATE keys, offers, sellers, products,
+			TRUNCATE order_items, orders, keys, offers, sellers, products,
 			         home_layout, banners, deals, product_sales
 			RESTART IDENTITY CASCADE`)
 		if err != nil {

@@ -95,11 +95,13 @@ What it does not do:
 ## Tests
 
 ```
-go test ./...
+go test -p 1 ./...
 ```
 
 Tests that need a database use `DATABASE_URL` from `.env` and expect the seed
-data. Without a database they are skipped.
+data. Without a database they are skipped. `-p 1` runs one package at a time:
+the packages share that database, and the checkout tests add a temporary
+product that the catalog tests would otherwise count.
 
 ```
 cd frontend && npm test
@@ -117,7 +119,7 @@ database, the Go tests, then the frontend lint, tests and build.
 To run the same checks locally:
 
 ```
-gofmt -l . && go vet ./... && go test ./...
+gofmt -l . && go vet ./... && go test -p 1 ./...
 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 cd frontend && npm run lint && npm test && npm run build
 ```

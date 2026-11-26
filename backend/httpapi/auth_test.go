@@ -470,3 +470,40 @@ func TestForgedRequestsAreRefused(t *testing.T) {
 		t.Errorf("the session did not survive the forged requests: status %d", w.Code)
 	}
 }
+
+// The order routes are behind the same two guards as the account routes: a
+// session for everything, and the site's own Origin for anything that
+// changes something. Pricing a cart is the one public route.
+func TestOrderRoutesAreGuarded(t *testing.T) {
+	at := newAuthTest(t)
+	cookie := at.signUp(goodPassword)
+	cart := `{"items":[{"offer_id":999999999,"quantity":1}],"expected_total_cents":100}`
+
+	tests := []struct {
+		name string
+		req  request
+		want int
+	}{
+		{"order history without a session", request{method: "GET", path: "/api/orders"}, http.StatusUnauthorized},
+		{"an order without a session", request{method: "GET", path: "/api/orders/0b0f3a52-8f0f-4c0a-9d0e-2b7c1c3d4e5f"}, http.StatusUnauthorized},
+		{"placing an order without a session", request{method: "POST", path: "/api/orders", body: cart, origin: testOrigin, contentType: "application/json"}, http.StatusUnauthorized},
+		{"paying without a session", request{method: "POST", path: "/api/orders/0b0f3a52-8f0f-4c0a-9d0e-2b7c1c3d4e5f/pay", body: `{"outcome":"approve"}`, origin: testOrigin, contentType: "application/json"}, http.StatusUnauthorized},
+		{"placing an order from another site, signed in", request{method: "POST", path: "/api/orders", body: cart, origin: "https://evil.example", contentType: "application/json", cookie: cookie}, http.StatusForbidden},
+		{"paying from another site, signed in", request{method: "POST", path: "/api/orders/0b0f3a52-8f0f-4c0a-9d0e-2b7c1c3d4e5f/pay", body: `{"outcome":"approve"}`, origin: "https://evil.example", contentType: "application/json", cookie: cookie}, http.StatusForbidden},
+
+		{"order history, signed in", request{method: "GET", path: "/api/orders", cookie: cookie}, http.StatusOK},
+		{"an order that does not exist, signed in", request{method: "GET", path: "/api/orders/0b0f3a52-8f0f-4c0a-9d0e-2b7c1c3d4e5f", cookie: cookie}, http.StatusNotFound},
+		{"an order id that is not an id, signed in", request{method: "GET", path: "/api/orders/nonsense", cookie: cookie}, http.StatusNotFound},
+		{"placing an order for an offer that does not exist", request{method: "POST", path: "/api/orders", body: cart, origin: testOrigin, contentType: "application/json", cookie: cookie}, http.StatusConflict},
+		{"placing an order with an empty cart", request{method: "POST", path: "/api/orders", body: `{"items":[]}`, origin: testOrigin, contentType: "application/json", cookie: cookie}, http.StatusBadRequest},
+		{"paying with an unknown outcome", request{method: "POST", path: "/api/orders/0b0f3a52-8f0f-4c0a-9d0e-2b7c1c3d4e5f/pay", body: `{"outcome":"free"}`, origin: testOrigin, contentType: "application/json", cookie: cookie}, http.StatusBadRequest},
+		{"pricing a cart needs no session", request{method: "POST", path: "/api/cart/price", body: cart, origin: testOrigin, contentType: "application/json"}, http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if w := at.do(tt.req); w.Code != tt.want {
+				t.Errorf("status %d, want %d; body %s", w.Code, tt.want, w.Body)
+			}
+		})
+	}
+}
