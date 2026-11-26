@@ -735,3 +735,67 @@ git status
 3. Confirm the repository name `eneba-marketplace` and that it should be public (the reviewers need to open it).
 
 Phase 1 is the skeleton: a styled header and footer, a Go `/api/health` endpoint that queries Neon, the GitHub repository, and the first Vercel deploy. Tell me when to start.
+
+### Prompt 3
+
+````text
+Approved, start phase 1. Create the GitHub repository as "eneba-marketplace"
+and make it public.
+````
+
+### Reply 8
+
+Phase 1 is built, tested and committed locally, but not published yet. GitHub and Vercel are not signed in on this PC and there is no Neon connection string, so the repository, the deploy and the database check are waiting on you. Steps are at the end.
+
+**What I built**
+- **Go API** (4 small packages under `backend/`):
+  - `GET /api/health` runs `SELECT 1` and answers `{"status":"ok","database":"ok"}`, or 503 with `"not configured"` / `"unreachable"`.
+  - `backend/db` opens the connection pool, set up for Neon's pooled string.
+  - `api/index.go` is the Vercel entry point and `cmd/server/main.go` is the local and Render one. Both call the same `httpapi.NewRouter`.
+- **React shell** in `frontend/` (Vite, TypeScript, React Router): header with logo, search box, account links and a category bar; footer; a homepage with a status panel that calls `/api/health`; placeholder pages so no header link is dead.
+- **Design tokens** in `frontend/src/styles/tokens.css`, taken from the measurements in `docs/design-reference.md`.
+- `vercel.json`, `.env.example`, a README draft, and 5 new entries in `DECISIONS.md` (13 to 17).
+
+**Why this way**
+- The status panel proves the whole chain (browser → Go → Postgres) on the public URL before any feature depends on it. A wrong connection string shows up as "Database: unreachable" instead of a blank error page.
+- One router, two entry points: this is what lets the API move from Vercel to Render without code changes.
+- Go packages live in `backend/`, not `internal/` as the plan said. Go restricts who may import an `internal` package, and Vercel compiles the function through its own wrapper. This is a precaution I have not tested; `PLAN.md` is updated.
+- The shop is called "Keybay" with a text wordmark, so nothing of Eneba's logo is copied. It is one string in `Header.tsx` if you want another name.
+- Dependencies added, each for one reason: `pgx` (PostgreSQL driver), `react-router-dom` (page URLs), `@fontsource/metropolis` (self-hosted font, no third-party request).
+
+**Go you will meet in these files**
+- A name starting with a capital letter (`NewRouter`, `Handler`) is visible outside its package; lowercase (`writeJSON`) is private to it.
+- Functions return an error as a second value, and the caller checks `if err != nil` right away. There are no exceptions.
+- `defer file.Close()` runs when the surrounding function returns, whichever way it exits.
+- `` `json:"status"` `` after a struct field is a tag: it tells the JSON encoder which key name to use.
+- `func (api *API) handleHealth(...)` is a method on the `API` struct. That is how handlers reach the database without a global variable.
+- `sync.Once` in `api/index.go` runs the setup one time per function instance, even if several requests arrive together.
+- `context.WithTimeout` gives the database query a 5-second limit and cancels it if the visitor disconnects.
+
+**What I checked**
+- `go vet` and `go test ./...` pass (2 tests: health without a database, and unknown routes answering in JSON).
+- `npm run build` and `npm run lint` pass.
+- In the browser at 1536px and 375px: no sideways scroll, Metropolis loads in all four weights, header sizes match the reference (search 550 x 57, nav row 50, buttons 35, 44 on phones), and the status panel shows "API reachable, Database not configured", which is correct without a connection string.
+
+**Not verified yet**
+- The database path ("Database: ok"). It needs your Neon string.
+- Vercel's Go build and the `/api/*` rewrite. That is the main risk of this phase and can only be tested by deploying.
+
+**How to run it**
+```
+cd ~/eneba-marketplace
+go test ./...
+go run ./cmd/server          # API on http://localhost:8080
+```
+Second terminal:
+```
+cd ~/eneba-marketplace/frontend
+npm run dev                  # site on http://localhost:5173
+```
+
+**Needed from you to finish phase 1**
+1. GitHub: `! ~/.local/bin/gh auth login` (GitHub.com, HTTPS, sign in through the browser) with your personal account.
+2. Vercel: `! vercel login` with your personal account.
+3. Neon: create a project and add a `dev` branch next to `main`. Then run `cp ~/eneba-marketplace/.env.example ~/eneba-marketplace/.env` and paste the `dev` branch's pooled connection string as `DATABASE_URL` in `.env`. Keep the `main` branch's pooled string at hand for Vercel.
+
+Tell me when those are done. I will then create the public `eneba-marketplace` repository, push, link the Vercel project, ask you to add the production `DATABASE_URL` there, deploy, and confirm the status panel shows "Database: ok" on the public URL.
