@@ -9,6 +9,7 @@
 //
 //	go run ./cmd/migrate                       (uses .env, the dev database)
 //	go run ./cmd/migrate -env .env.production  (the production database)
+//	go run ./cmd/migrate -status               (only show what would run)
 package main
 
 import (
@@ -29,6 +30,7 @@ import (
 func main() {
 	envFile := flag.String("env", ".env", "file to read DATABASE_URL_UNPOOLED from")
 	dir := flag.String("dir", "migrations", "folder with the .sql files")
+	statusOnly := flag.Bool("status", false, "show which migrations are pending and change nothing")
 	flag.Parse()
 
 	config.LoadDotEnv(*envFile)
@@ -41,20 +43,32 @@ func main() {
 	defer conn.Close(ctx)
 	fmt.Printf("database: %s (from %s)\n", label, *envFile)
 
-	if err := run(ctx, conn, *dir); err != nil {
+	if err := run(ctx, conn, *dir, *statusOnly); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(ctx context.Context, conn *pgx.Conn, dir string) error {
-	// The bookkeeping table. IF NOT EXISTS makes the very first run work.
-	_, err := conn.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version    TEXT PRIMARY KEY,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-		)`)
+// run applies the pending migrations. With statusOnly it lists them and
+// changes nothing, which is how to check a database before touching it.
+func run(ctx context.Context, conn *pgx.Conn, dir string, statusOnly bool) error {
+	// to_regclass returns NULL when the table does not exist, which is the
+	// case on a database that has never been migrated.
+	var bookkeepingExists bool
+	err := conn.QueryRow(ctx, "SELECT to_regclass('schema_migrations') IS NOT NULL").Scan(&bookkeepingExists)
 	if err != nil {
-		return fmt.Errorf("creating schema_migrations: %w", err)
+		return fmt.Errorf("checking for schema_migrations: %w", err)
+	}
+
+	if !bookkeepingExists && !statusOnly {
+		_, err := conn.Exec(ctx, `
+			CREATE TABLE schema_migrations (
+				version    TEXT PRIMARY KEY,
+				applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			)`)
+		if err != nil {
+			return fmt.Errorf("creating schema_migrations: %w", err)
+		}
+		bookkeepingExists = true
 	}
 
 	files, err := filepath.Glob(filepath.Join(dir, "*.sql"))
@@ -70,14 +84,23 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 	for _, file := range files {
 		version := filepath.Base(file)
 
+		// Without the bookkeeping table nothing has been applied yet.
 		var alreadyApplied bool
-		err := conn.QueryRow(ctx,
-			"SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)", version,
-		).Scan(&alreadyApplied)
-		if err != nil {
-			return fmt.Errorf("checking %s: %w", version, err)
+		if bookkeepingExists {
+			err := conn.QueryRow(ctx,
+				"SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)", version,
+			).Scan(&alreadyApplied)
+			if err != nil {
+				return fmt.Errorf("checking %s: %w", version, err)
+			}
 		}
 		if alreadyApplied {
+			continue
+		}
+
+		if statusOnly {
+			fmt.Printf("pending %s\n", version)
+			applied++
 			continue
 		}
 
@@ -88,8 +111,11 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 		applied++
 	}
 
-	if applied == 0 {
+	switch {
+	case applied == 0:
 		fmt.Println("nothing to do, the schema is up to date")
+	case statusOnly:
+		fmt.Println("status only: nothing was changed")
 	}
 	return nil
 }

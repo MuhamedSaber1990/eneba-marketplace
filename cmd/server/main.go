@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"eneba-marketplace/backend/config"
 	"eneba-marketplace/backend/db"
@@ -28,6 +29,19 @@ func main() {
 		port = "8080"
 	}
 
+	// http.ListenAndServe has no time limits at all, so one slow or stuck
+	// client could hold a connection open forever. An http.Server lets us
+	// set them.
+	server := &http.Server{
+		Addr:    ":" + port,
+		Handler: httpapi.NewRouter(pool),
+
+		ReadHeaderTimeout: 5 * time.Second,  // time to send the request line and headers
+		ReadTimeout:       10 * time.Second, // time to send the whole request
+		WriteTimeout:      30 * time.Second, // time for us to send the response
+		IdleTimeout:       60 * time.Second, // how long an unused keep-alive connection stays open
+	}
+
 	log.Printf("API listening on http://localhost:%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, httpapi.NewRouter(pool)))
+	log.Fatal(server.ListenAndServe())
 }
