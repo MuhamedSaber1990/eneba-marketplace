@@ -1839,3 +1839,132 @@ Returning visitors may see the old, clipped covers for up to a day, because brow
 - Phases 1 to 3 are done. Next is phase 4, search: typo-tolerant and partial matching with PostgreSQL trigrams, suggestions in the header box from every page, a results page, and tests for the typo cases. It needs migration `003_search.sql` for the extension and its index.
 
 Tell me when to start phase 4. I will give you the plan first, as before.
+
+### Prompt 17
+
+````text
+Looks good live. One small thing on the homepage: the MYTHFORGE LEGENDS cover text still runs right up to the edge, give long words a bit more margin.
+
+Start phase 4. Plan first like before, and tell me which typos and partial words you'll test so I can try them myself.
+````
+
+### Reply 22
+
+The cover margin is fixed and committed locally. The phase 4 plan is below. Nothing of phase 4 is built yet.
+
+## Cover margin
+
+- **What was wrong:** my size formula assumed a capital letter is 0.72 of the font size wide. Wide letters such as M and W are closer to 0.8, so a word like "MYTHFORGE" still reached the edge.
+- **The fix:** the formula now uses 0.8 and keeps 25 pixels clear on the right. A nine-letter word is drawn at size 25 where it was 28, and a ten-letter word at 22 where it was 25. Titles of up to seven letters per line keep the full size 30.
+- **Checked:** I rendered six covers side by side and looked at them (Mythforge Legends, Witchlight Academy, Emberwatch, Bladeborn Arena, Thunder Circuit Kart, Hollow Tide). All have a clear margin now. The test is updated.
+- It needs a push to go live. I will ask with the phase 4 push, or sooner if you want it out now.
+
+## Phase 4: search
+
+**Skills read:** the Go skills as before, and the search references in the neon-postgres skill. Those describe Neon's own search extensions (BM25 ranking and vector search). I am not using them, for two reasons: they rank documents by word statistics and do nothing for typos, and they exist only on Neon, so the CI container could not run the tests. The plan stays with `pg_trgm`, which is standard PostgreSQL. I checked that it is available on both of your databases (version 1.6, not yet installed).
+
+### How it works
+
+A trigram is a three-letter slice of a word. "kart" contains " ka", "kar", "art", "rt ". Two words that share most of their trigrams are similar, so "circut" still lands near "circuit". PostgreSQL's `word_similarity` gives that as a number from 0 to 1.
+
+**Matching, word by word**
+- The query is trimmed, lowercased and split into words (at most 5).
+- Every word has to match the product name, in one of two ways:
+  - the name contains it ("forge" inside "Mythforge"), which covers partial words;
+  - or it is similar enough to some word in the name, which covers typos.
+- Because each word is checked on its own, "kart xbox" finds "Thunder Circuit Kart Xbox Key" even though the words are not next to each other.
+- Typo matching only applies to words of 4 letters or more. A 3-letter word has too few trigrams, and loosening the rule for it would match almost anything.
+
+**Ranking, best first**
+1. The name starts with the whole query.
+2. The name contains the whole query.
+3. Every word is contained in the name.
+4. Matched through similarity only (typos).
+Inside each group: higher similarity first, then more units sold.
+
+### What gets built
+
+**Database: `003_search.sql`**
+- `CREATE EXTENSION pg_trgm` and a trigram index on `products.name`.
+- I will run `EXPLAIN` and tell you plainly whether PostgreSQL uses the index. With 56 products I expect it to read the whole table, which is the right choice at that size. The index is there for a catalog that grows.
+
+**API**
+- `GET /api/products?q=...` gets the new matching, replacing the plain "contains" from phase 2. It also gets a `relevance` sort, used by default when `q` is present. All filters keep working with a search.
+- `GET /api/search/suggest?q=...`: the top 6 matches for the header dropdown, cached at the edge for 60 seconds.
+
+**Frontend**
+- **Header search box, on every page:** suggestions appear after 2 letters, 250 ms after you stop typing. An older request is cancelled when you type more. Arrow keys move through the list, Enter opens the highlighted product or goes to the results page, Escape closes it. Each suggestion shows cover, name and price.
+- **Results page `/search?q=...`:** the heading says what was searched and how many matched. It reuses the store's grid, filters, sort and paging.
+- **No results:** a clear message, plus the best sellers row so the page is not a dead end.
+
+### Decisions I am making for you
+
+1. **One search endpoint, not two.** The plan listed a separate `GET /api/search`. Search is the store listing with a `q`, so I will put the logic in `/api/products` and keep only `/api/search/suggest` separate. One query to maintain and test.
+2. **The results page is the store page with a search heading.** Same component, so filters and paging behave the same in both places.
+3. **No "did you mean" line.** With a typo, the page shows the matches directly. Working out which correction to print is extra logic for little gain here.
+4. **The similarity threshold is picked by testing.** I will start near 0.5, run the list below, and record the final number and the cases that decided it in `DECISIONS.md`.
+5. **Suggestions list editions, not games.** Typing "thunder" shows the Steam and Xbox editions as separate lines, because those are what you can open.
+
+### What I will test, and you can try
+
+All of these are from the seeded catalog. Type them in the header box once it is live.
+
+**Partial words**
+| Type | Should find |
+|---|---|
+| `thund` | Thunder Circuit Kart |
+| `forge` | Mythforge Legends (middle of a word) |
+| `circ` | Circuit Breakers and Thunder Circuit Kart |
+| `harb` | Quiet Harbor |
+| `kart` | Thunder Circuit Kart |
+
+**Typos**
+| Type | Should find | Kind of mistake |
+|---|---|---|
+| `witchlite` | Witchlight Academy | wrong ending |
+| `circut` | Circuit Breakers, Thunder Circuit Kart | missing letter |
+| `obsidain` | Obsidian Vow | two letters swapped |
+| `starfal odyssey` | Starfall Odyssey | missing double letter |
+| `emberwach` | Emberwatch | missing letter |
+| `lanternwod` | Lanternwood | missing letter |
+| `mythforge legnds` | Mythforge Legends | typo in the second word |
+| `frostlin raly` | Frostline Rally | a typo in each word |
+
+**Several words, case, platform**
+| Type | Should find |
+|---|---|
+| `QUIET HARBOR` | Quiet Harbor (case does not matter) |
+| `kart xbox` | only the Xbox edition of Thunder Circuit Kart |
+| `ashen steam` | Ashen Crown on Steam, if that edition exists; otherwise nothing |
+| `switch` | every Nintendo Switch product |
+
+**Should find nothing**
+| Type | Why |
+|---|---|
+| `zzzzqq` | nonsense |
+| `%` | must not act as a wildcard |
+| `a` | too short, no suggestions |
+| `thunder zzzz` | one word matches, the other does not |
+
+**Known limits, which I will also test and list in the README**
+- A 3-letter word with a typo (`vwo` for "vow") finds nothing.
+- Two mistakes in a short word (`krat` for "kart") may find nothing.
+- No synonyms and no understanding of meaning: `racing` does not find Thunder Circuit Kart, because search looks at names, not genres.
+
+I am promising the list as the target. The last two typo rows have two mistakes each and are the likeliest to fail at a sensible threshold. If any row fails, I will tell you which and why instead of loosening the rule until junk matches.
+
+### Tests
+
+- **Go, with the database:** every row above as a table-driven test, plus ranking (an exact match comes before a typo match) and search combined with a platform filter.
+- **Go, without a database:** splitting and cleaning the query.
+- **Frontend unit test:** the debounce.
+- **Browser:** typing, the dropdown, arrow keys, Enter and Escape, the results page, the no-results page, under the security headers.
+
+### Order of work
+
+1. Build, migrate `dev`, tune the threshold, run the tests, check in the browser.
+2. Show you the summary, the test list with pass or fail per row, and the SQL.
+3. Production status, then your approval for the migration. There is no seed step this time.
+4. Ask before pushing. Waiting locally now: the screenshots, the cover fix and the chat log.
+
+Tell me if the plan is ok or what to change.
