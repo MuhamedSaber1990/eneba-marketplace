@@ -1080,3 +1080,99 @@ As far as I know, a Neon branch inherits its parent's roles and passwords, so th
 3. Production: create `.env.production` as described, or tell me you prefer to run those commands yourself.
 
 There are two unpushed commits, both chat log updates. I will not push until you say so.
+
+### Prompt 8
+
+````text
+Ok, start phase 2.
+
+Migration tool: go with our own runner. I want to be able to explain every line of it.
+
+Production: I created .env.production with DATABASE_URL_UNPOOLED for the main branch, so use the -env flag like you described. Ask me before each production run and before pushing.
+
+Your other decisions are fine with me.
+````
+
+### Reply 13
+
+Phase 2 is built and working locally against the `dev` database. Nothing has touched production and nothing is pushed: both are waiting for your approval (see the end).
+
+## What I built
+
+**Database**
+- `migrations/001_catalog.sql`: four tables.
+  - `products`: one edition of a game for one platform and region, with a URL slug and two cover colors.
+  - `sellers`: name, rating (0 to 5), sales count.
+  - `offers`: one seller's price for one product, in whole cents, unique per (product, seller).
+  - `keys`: one row per key with a status of available, reserved or sold.
+  - Indexes on platform, region and seller, plus a partial index holding only available keys, which is what stock counts read.
+- `cmd/migrate`: applies new `.sql` files in name order, each in its own transaction, and records them in `schema_migrations`. A second run does nothing.
+- `cmd/seed`: 24 invented games sold in 2 or 3 editions each. On `dev` that gave 56 products, 8 sellers, 173 offers and 1,247 keys. Three products are fully sold out on purpose. The random seed is fixed, so production will get the same data.
+
+**API**
+- `GET /api/products`: filters, sort, page. Returns items, total and page count.
+- `GET /api/products/{slug}`: details plus offers, in stock first, cheapest first.
+- `GET /api/filters`: platforms, regions and the price range, read from the data.
+- `GET /api/products/{slug}/cover.svg`: the generated cover, cacheable for a day.
+- Bad input gets a 400 with a readable message (unknown sort, page 0, min above max). A missing product gets a 404.
+
+**Frontend**
+- Store page: filter column (name, price range, platform, region), sort menu, grid, pagination, "Clear all filters". Everything is in the URL.
+- Product page: cover, facts, a "Best price" box, the offers table and the description.
+- The header's category links now come from `/api/filters`.
+
+## Why it is built this way
+
+- **One fixed SQL statement for filtering.** Each filter is always present as "this filter is empty, or the column matches". Unused filters let every row through. Nothing a visitor types becomes part of the SQL text, and the sort order is picked from a fixed list of four.
+- **Price means the cheapest offer that has stock.** Cards, the price filter and price sorting all use that one number.
+- **The URL is the only state of the store page.** A filtered view can be shared, reloaded, and undone with the back button.
+- **Migrations go over the direct connection.** Both commands refuse a pooled host and print which database they are about to change.
+- All of these are recorded in `DECISIONS.md` as entries 19 to 27.
+
+## Go you will meet in these files
+
+- `*int` for an optional number: a pointer can be `nil`, which is how "no minimum price" and "sold out" are told apart from 0.
+- `[]string{}` versus `nil`: an empty slice becomes `[]` in JSON and an empty array in SQL; nil would become `null`.
+- `errors.Is(err, catalog.ErrNotFound)`: a named error value the handler checks to choose 404 over 500.
+- `fmt.Errorf("listing products: %w", err)`: wraps an error with context while keeping the original inside it.
+- `needsDB(handler)` in the router: a function that takes a handler and returns a new one. That is all "middleware" means.
+- `ProductDetail` contains `ProductSummary` with no field name. That is embedding: the detail gets all the summary's fields.
+- `flag.String("env", ".env", ...)`: the standard library's command-line flags.
+- Table-driven tests: a list of named cases and one loop, each case run with `t.Run`.
+
+## What I checked
+
+- `go vet` and `go test ./...` pass. That is 15 cases for request parsing, 7 for cover drawing and escaping, 4 for the search escaping, and 5 database tests that walk every product: each filter, all four sort orders, pagination with no product on two pages, offers ordering, and list and detail agreeing on the price.
+- Frontend build and lint pass.
+- In the browser at 1440px: the layout matches the reference (220px filter column, 4 cards of 225px, 20 per page). Ticking Steam gave 13 products, adding Europe gave 6, sorting by price put them in rising order, clearing went back to 56, and "Next" went to page 2 of 3. The URL changed with every step.
+- At 375px: no sideways scroll on either page, two cards per row, filters collapse behind a button, and the offers table fits.
+- Text contrast on the purple and dark panels is above 4.5 to 1 for every color used.
+
+## Not done or not verified
+
+- I measured layout and behavior but did not look at a screenshot, because I still cannot find where the browser tool saves its image files. Please look at `/store` and one product page yourself once it is live.
+- Name search is plain "contains" for now. Typo tolerance is phase 4.
+- No "Add to cart" button yet. That is phase 6.
+- No frontend unit tests in this phase.
+
+## How to run and test it
+
+```
+cd ~/eneba-marketplace
+go test ./...
+go run ./cmd/server                     # terminal 1
+cd frontend && npm run dev              # terminal 2, then open http://localhost:5173/store
+```
+
+Things worth trying: tick two platforms, set a price range, sort by price, copy the URL into a new tab, press back. Then open a sold-out product, for example by sorting "Price: high to low" and going to the last page.
+
+## Your approval, two separate steps
+
+**1. Production database.** Please read `migrations/001_catalog.sql` first (56 lines, commented). When you say yes I will run, in this order:
+```
+go run ./cmd/migrate -env .env.production
+go run ./cmd/seed -env .env.production
+```
+Both print the database they connect to before changing anything. Neither deletes data: the migration only creates tables, and the seed refuses to run if products already exist.
+
+**2. Push.** After that succeeds I will ask again before pushing. The push deploys the store to production. There are 7 local commits waiting.
