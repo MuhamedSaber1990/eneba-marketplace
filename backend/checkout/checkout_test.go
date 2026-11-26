@@ -306,6 +306,10 @@ func TestCreateOrderReservesKeys(t *testing.T) {
 	if len(order.Items) != 1 || order.Items[0].Quantity != 2 || order.Items[0].UnitPriceCents != 1999 {
 		t.Errorf("items = %+v", order.Items)
 	}
+	// The countdown starts at the full reservation time, by the server's clock.
+	if order.SecondsLeft < ReservationMinutes*60-30 || order.SecondsLeft > ReservationMinutes*60 {
+		t.Errorf("seconds left = %d, want about %d", order.SecondsLeft, ReservationMinutes*60)
+	}
 	// An unpaid order must not show its keys, even though they are reserved.
 	if len(order.Items[0].Keys) != 0 {
 		t.Errorf("a pending order exposes keys: %v", order.Items[0].Keys)
@@ -391,8 +395,8 @@ func TestPayApprovedDeliversKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pay: %v", err)
 	}
-	if paid.Status != StatusPaid || paid.PaidAt == nil {
-		t.Errorf("status %q, paid_at %v", paid.Status, paid.PaidAt)
+	if paid.Status != StatusPaid || paid.PaidAt == nil || paid.SecondsLeft != 0 {
+		t.Errorf("status %q, paid_at %v, seconds left %d", paid.Status, paid.PaidAt, paid.SecondsLeft)
 	}
 	if len(paid.Items[0].Keys) != 2 || paid.Items[0].Keys[0] == paid.Items[0].Keys[1] {
 		t.Errorf("keys = %v, want two different keys", paid.Items[0].Keys)
@@ -474,7 +478,7 @@ func TestOrdersBelongToTheirOwner(t *testing.T) {
 	if err != nil || len(mine.Items[0].Keys) != 1 {
 		t.Errorf("the owner's view: %+v, %v", mine, err)
 	}
-	if list, _ := w.store.ListOrders(ctx, owner); len(list) != 1 || list[0].ItemCount != 1 {
+	if list, _ := w.store.ListOrders(ctx, owner); len(list) != 1 || list[0].KeyCount != 1 || list[0].LineCount != 1 {
 		t.Errorf("the owner's order list: %+v", list)
 	}
 }

@@ -69,13 +69,18 @@ type OrderItem struct {
 
 // Order is an order as its owner sees it.
 type Order struct {
-	ID         string      `json:"id"`
-	Status     string      `json:"status"`
-	TotalCents int         `json:"total_cents"`
-	CreatedAt  time.Time   `json:"created_at"`
-	ExpiresAt  time.Time   `json:"expires_at"`
-	PaidAt     *time.Time  `json:"paid_at"` // null until paid
-	Items      []OrderItem `json:"items"`
+	ID         string    `json:"id"`
+	Status     string    `json:"status"`
+	TotalCents int       `json:"total_cents"`
+	CreatedAt  time.Time `json:"created_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	// SecondsLeft is how long a pending order still holds its keys, measured
+	// by the database's clock. The order page counts down from this number.
+	// It does not compare ExpiresAt with the visitor's own clock, which may
+	// be wrong by minutes or hours. Zero for an order that is not pending.
+	SecondsLeft int         `json:"seconds_left"`
+	PaidAt      *time.Time  `json:"paid_at"` // null until paid
+	Items       []OrderItem `json:"items"`
 }
 
 // reserveKeysSQL takes up to $2 available keys of offer $1 for order item $3
@@ -402,10 +407,13 @@ func (s *Store) GetOrder(ctx context.Context, userID int64, orderID string) (Ord
 
 	var order Order
 	err := s.db.QueryRow(ctx, `
-		SELECT id::text, `+displayStatusSQL+`, total_cents, created_at, expires_at, paid_at
+		SELECT id::text, `+displayStatusSQL+`, total_cents, created_at, expires_at, paid_at,
+		       CASE WHEN status = 'pending'
+		            THEN GREATEST(0, FLOOR(EXTRACT(EPOCH FROM expires_at - now())))::int
+		            ELSE 0 END
 		  FROM orders
 		 WHERE id = $1 AND user_id = $2`, orderID, userID,
-	).Scan(&order.ID, &order.Status, &order.TotalCents, &order.CreatedAt, &order.ExpiresAt, &order.PaidAt)
+	).Scan(&order.ID, &order.Status, &order.TotalCents, &order.CreatedAt, &order.ExpiresAt, &order.PaidAt, &order.SecondsLeft)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Order{}, ErrOrderNotFound
 	}
@@ -454,7 +462,8 @@ type OrderSummary struct {
 	Status     string    `json:"status"`
 	TotalCents int       `json:"total_cents"`
 	CreatedAt  time.Time `json:"created_at"`
-	ItemCount  int       `json:"item_count"` // keys in the order, over all lines
+	KeyCount   int       `json:"key_count"`  // keys in the order, over all lines
+	LineCount  int       `json:"line_count"` // different products in the order
 	FirstItem  string    `json:"first_item"` // a product name, to recognise the order by
 }
 
@@ -464,6 +473,7 @@ func (s *Store) ListOrders(ctx context.Context, userID int64) ([]OrderSummary, e
 	rows, err := s.db.Query(ctx, `
 		SELECT o.id::text, `+displayStatusSQL+`, o.total_cents, o.created_at,
 		       (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE order_id = o.id),
+		       (SELECT COUNT(*) FROM order_items WHERE order_id = o.id),
 		       COALESCE((SELECT product_name FROM order_items WHERE order_id = o.id ORDER BY id LIMIT 1), '')
 		  FROM orders o
 		 WHERE o.user_id = $1
@@ -477,7 +487,7 @@ func (s *Store) ListOrders(ctx context.Context, userID int64) ([]OrderSummary, e
 	orders := []OrderSummary{}
 	for rows.Next() {
 		var o OrderSummary
-		if err := rows.Scan(&o.ID, &o.Status, &o.TotalCents, &o.CreatedAt, &o.ItemCount, &o.FirstItem); err != nil {
+		if err := rows.Scan(&o.ID, &o.Status, &o.TotalCents, &o.CreatedAt, &o.KeyCount, &o.LineCount, &o.FirstItem); err != nil {
 			return nil, fmt.Errorf("reading an order row: %w", err)
 		}
 		o.CreatedAt = o.CreatedAt.UTC()
