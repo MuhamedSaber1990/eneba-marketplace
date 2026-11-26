@@ -2877,3 +2877,98 @@ pending 005_orders.sql
 With your yes I will run `go run ./cmd/migrate -env .env.production`. It creates two tables and adds one column and one constraint to `keys`. Every existing key is `available` with no owner, which satisfies the new constraint. No seed step.
 
 Then I will ask before pushing. 8 local commits are waiting. After the push I will buy something on the live site with the demo account and check the keys arrive.
+
+### Prompt 25
+
+````text
+Good that the naive query caught the problem in the test itself, keep that story in DECISIONS.md.
+
+Yes, run the migration on production. If it applies cleanly and status shows nothing pending, push too. Then buy something on the live site with the demo account, check the keys arrive, and tell me what the race detector says in CI.
+
+One question, don't build anything yet: payment is simulated and the demo password is public, so anyone could buy every key and leave the live store sold out before my interview. What's the simplest way to deal with that?
+````
+
+### Reply 30
+
+The migration applied cleanly, I pushed, CI passed with the race detector on, and I bought a key on the live site. Phase 6 is live. Your question is answered at the end, and nothing was built for it.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app
+- The test-flaw story is in `DECISIONS.md`, entry 65, and stays there.
+
+## The migration
+
+```
+go run ./cmd/migrate -env .env.production
+  database: ep-restless-union-bhfufpzq (from .env.production)
+  applied 005_orders.sql
+status: nothing to do, the schema is up to date
+```
+A read-only check before pushing: 0 orders, all 1,247 keys still `available` with no owner, the new constraint present, 56 products, 5 migrations recorded. The live store kept answering.
+
+## CI and the race detector
+
+Both jobs passed.
+
+**The race detector reported nothing.** The Go tests ran as `go test -race -p 1 ./...` and all five packages passed with no "DATA RACE" warning, including the checkout package, where the concurrency tests start up to 20 goroutines at once.
+- What that tells you: the Go code does not have two goroutines touching the same memory without coordination.
+- What it does not tell you: anything about the database. The race detector watches the program's own memory. That two buyers cannot get the same key is shown by the concurrency tests, which also passed there, on plain PostgreSQL.
+
+**One cost to know about:** the test step now takes 192 seconds, up from under 30. The race detector slows everything several times over, and the auth tests do real bcrypt hashing. The `httpapi` package alone took 116 seconds. It is fine for now. If it gets annoying, the fix is to run the race detector only on the checkout package.
+
+Also in that run: all five migrations applied on the empty container and the seed created the catalog, the homepage and the demo account.
+
+## Buying a key on the live site
+
+As the demo account, in a browser:
+
+| Step | Result |
+|---|---|
+| Add "Paper Planets Xbox Key GLOBAL" from NorthGate Games | cart icon shows 1, total €8.69 |
+| Go to checkout while signed out | sent to sign in, then back to checkout |
+| Place order | "Waiting for payment", countdown at 14:59, no key shown |
+| Stock on the product page while reserved | 9 → 8 |
+| Simulate a declined card | "Payment declined", cart still holds 1, stock back to 9 |
+| Order again and pay | "Paid" in 1.3 seconds, one key shown |
+| After paying | cart empty, stock 8 |
+| Reload the order page | the key is still there |
+| Pay the paid order again through the API, as "decline" | still paid, still 1 key |
+| Order history | both orders listed, one paid and one declined |
+| The same order requested while signed out | 401 |
+
+Zero policy violations and zero unexpected console errors. The countdown starts at 14:59, so the server-clock fix works on the live site too.
+
+**What this left on production:** the demo account now has 2 orders (1 paid, 1 declined), and one Paper Planets key is sold. That is the purchase you asked for.
+
+**Not checked on the live site:** a second account trying to read the order. I skipped it to avoid creating a throwaway user in production. It is covered by the Go tests and by the local browser run.
+
+Three screenshots of the live flow are in `docs/screenshots/`: `cart.png`, `order-pending.png` and `order-paid.png`.
+
+## Your question: someone buying every key
+
+You are right that nothing stops it. Buying is free, the demo password is public, and anyone can also register their own accounts. The limits I built (5 per line, 3 unpaid orders) slow reserving, not buying.
+
+**The simplest thing that really solves it: restock automatically.** The keys are invented anyway, so the shop can make more. When a sale leaves an offer with fewer than, say, 3 keys, the same transaction adds 5 freshly generated ones.
+- A buyer still sees stock go down after a purchase, so the reservation logic stays visible.
+- An offer can never be emptied by buying. The three products seeded as sold out stay sold out, because nothing is ever sold from them.
+- It is about 15 lines in the one function that marks an order paid, behind a setting (`DEMO_RESTOCK=1`) that is on for the live site. The tests keep it off, since they depend on exact stock.
+- It costs one honest line in the README: "on the live demo, stock is topped up automatically so the store cannot be bought empty".
+
+**The zero-code fallback: reseed before the interview.**
+`go run ./cmd/seed -reset -env .env.production` restores the full catalog in a few seconds. Two drawbacks: it also deletes all orders, including a reviewer's if they bought something to try the flow, and it only helps if you remember to run it and nobody empties the store afterwards.
+
+**What I would not do:**
+- A cap on purchases per account. Anyone can make another account.
+- Making the demo account's purchases not use up keys. That special case would sit in the middle of the checkout logic, which is the part you most want to be able to explain cleanly.
+- Hiding the demo password. The brief asks for test credentials.
+
+**My recommendation:** build the automatic restock, and keep the reseed command in mind as a reset button. Phase 7 does not change this: Stripe's test cards are free as well.
+
+A related point you did not ask about: the same person could also fill the database with accounts and orders. The sign-up limit (10 per IP per hour) slows that, and Neon's free tier has storage to spare, so I would leave it.
+
+Tell me whether to build the restock. If yes, I would do it before phase 7, as its own small change with a test.
+
+## State
+
+- GitHub and the live site are at the same commit.
+- Committed locally and not pushed: the three screenshots and this chat log entry.
+- Phases 1 to 6 are done. Phase 7 is Stripe in test mode, then phase 8 is the styling pass, the README and the walkthrough.
