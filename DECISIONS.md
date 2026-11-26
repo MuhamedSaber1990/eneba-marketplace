@@ -677,3 +677,171 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   a crafted link cannot bounce someone to another site right after they
   typed their password.
 
+## 57. Order and key states, and what enforces them
+
+- **A key** is `available`, `reserved` (held for one order item) or `sold`.
+  It moves available → reserved → sold, or back from reserved to available
+  when the order fails or runs out of time. A sold key never changes.
+- **An order** is `pending` (keys reserved, a deadline 15 minutes away),
+  `paid`, `failed` (payment declined) or `expired` (deadline passed). The
+  three end states never change.
+- **The database enforces two rules itself:** an available key belongs to no
+  order item and a reserved or sold key always belongs to one
+  (`keys_status_matches_owner`), and an order is paid exactly when it has a
+  payment time. No code path can leave a key half assigned.
+- **Reservations last 15 minutes,** where `PLAN.md` said 30. Stock held by
+  abandoned orders comes back sooner.
+
+## 58. A key cannot be sold twice: `FOR UPDATE SKIP LOCKED`
+
+- **The statement** (`reserveKeysSQL` in `backend/checkout/orders.go`): an
+  `UPDATE` whose inner `SELECT` picks available keys of the offer and locks
+  those rows until the transaction ends. `SKIP LOCKED` makes a second
+  transaction pass over rows another one has locked and look for others. Two
+  transactions can therefore never pick the same row.
+- **Alternatives:** the strictest isolation level (`SERIALIZABLE`), which the
+  Go skill suggests for inventory; a stock counter on the offer with a
+  `CHECK (stock >= 0)`; an application-level lock.
+- **Why this one:** serializable transactions fail whenever they overlap and
+  have to be retried, which needs a retry loop around every order. A stock
+  counter says how many are left but not which key each buyer gets, and here
+  each buyer needs a specific key. A lock in the application does not work
+  across serverless instances. The row lock says exactly which rows are
+  protected and needs nothing else.
+- **All or nothing:** creating an order is one transaction. If any line
+  cannot be filled, the whole order is rolled back, including the lines that
+  could. Lines are sorted by offer id first, so two orders wanting the same
+  two offers always take them in the same order.
+
+## 59. The trade-off of `SKIP LOCKED`: "sold out" can be premature
+
+- **What can happen:** two buyers go for the last key at the same moment. The
+  first one's transaction holds it. The second is told "not enough stock"
+  immediately. If the first buyer then has the payment declined, or never
+  pays and the order expires, the key comes back, and the second buyer was
+  turned away from a key that ended up unsold.
+- **Why it is accepted:** the answer was true when it was given, since the
+  key was held by someone else. The buyer is told at once and can try again
+  a little later. Nothing is oversold, which is the property that must not
+  break.
+- **The alternative** is plain `FOR UPDATE` without `SKIP LOCKED`: the second
+  buyer's request waits until the first transaction ends and then sees the
+  result. That only covers the split second in which the first order is
+  being created. The first buyer's reservation lasts up to 15 minutes after
+  that, and no request can wait that long. To really close the gap a shop
+  needs a waiting list: record the second buyer's interest and offer them
+  the key when it is released. That is a feature of its own (a queue, a
+  notification, a time limit on the offer) and is not built here.
+- **A smaller step that would help:** tell the refused buyer how many keys
+  are held by unpaid orders, so "try again in a few minutes" is an informed
+  suggestion. Not built.
+
+## 60. Expiry is cleaned up through the order row
+
+- **The problem:** an unpaid order does not release its keys by itself, and
+  the free tier has no scheduled jobs.
+- **What was built:** `releaseExpiredSQL` runs at the start of every order
+  creation and every payment. One statement marks pending orders past their
+  deadline as expired and releases the keys of exactly those orders.
+- **Why it goes through the order row:** a payment locks its order row while
+  it works. The cleanup selects orders with `FOR UPDATE SKIP LOCKED`, so it
+  passes over an order that is being paid at that moment. A key is therefore
+  never released while it is being sold. That order's fate is decided by the
+  payment, which checks the deadline itself after taking the lock.
+- **What the buyer sees:** reading an order reports "pending and past its
+  deadline" as expired, so the page is right even before any cleanup ran.
+- **Alternative:** a cron job. More timely, but one more moving part, and the
+  result for a buyer is the same.
+
+## 61. Paying is safe to repeat, and is the only place an order is fulfilled
+
+- **`Pay` locks the order row first.** A second call for the same order (a
+  double click, two tabs, a webhook delivered twice) waits, then finds the
+  order already paid and changes nothing. Keys are sold once and the sale is
+  counted once.
+- **One fulfilment step:** `markPaid` marks the keys sold, the order paid and
+  adds the quantities to `product_sales` for the best sellers block. The
+  simulated payment calls it now. The Stripe phase will call the same
+  function from its webhook, and never from the page the buyer lands on.
+- **A last check inside it:** the number of keys just sold must equal the
+  quantity ordered. If not, the transaction fails and rolls back, which is
+  better than handing over fewer keys than were paid for.
+- **Payment is simulated with two buttons, not a card form.** A form that
+  looks like it wants a card number invites someone to type a real one.
+
+## 62. What the buyer is protected from
+
+- **A price they did not see:** the browser sends offer ids and quantities
+  only, and the server reads every price itself. The browser also sends the
+  total it showed. If the server's total differs, the order is refused with
+  the new prices and nothing is reserved.
+- **Other people reading their keys:** an order belongs to its user. Someone
+  else's order is answered with 404, the same as one that does not exist, so
+  the answer does not confirm it exists. Keys are selected only for a paid
+  order: both conditions are in the SQL, not in an `if` that could be
+  forgotten.
+- **Guessable order addresses:** order ids are random UUIDs, not 1, 2, 3.
+- **One account holding all the stock:** at most 5 of an offer per order, 10
+  lines per order and 3 unpaid orders per user. This is a soft limit: two
+  orders placed by one user at the same instant could both pass the count.
+
+## 63. The cart lives in the browser and holds no prices
+
+- **What is stored:** offer ids and quantities, in `localStorage`. Names,
+  prices and stock are asked from the server every time the cart is shown.
+- **Why:** the cart has to exist before sign-in, and prices kept in the
+  browser would be stale and would invite tampering. Editing the saved cart
+  by hand can change nothing that the server does not check.
+- **`parseCart` trusts nothing it reads back:** a damaged or hand-edited
+  saved cart is reduced to the lines that make sense.
+- **The cart is emptied only when an order is paid,** so a declined payment
+  or an expired order does not cost the buyer their selection.
+
+## 64. The countdown runs on the server's clock
+
+- **The bug:** the order page first compared the order's deadline with the
+  device's own clock, and showed 15:04 for a 15-minute reservation because
+  this PC's clock was a few seconds behind the database's. A device an hour
+  off would have shown the order as expired at once.
+- **The fix:** the API sends `seconds_left`, worked out by the database. The
+  page counts down from that length of time and never compares two clocks.
+
+## 65. Concurrency tests, and how I know they can fail
+
+- **The tests** (`backend/checkout/concurrency_test.go`) run against a real
+  database, locally and in CI:
+  1. 20 buyers, 1 key: exactly 1 order, 19 refused.
+  2. 20 buyers wanting 2 each, 5 keys: exactly 2 orders, nobody holds a
+     partial order.
+  3. One order paid 10 times at once: sold once, counted once.
+  4. A payment and the cleanup colliding at the deadline, 12 rounds with
+     shifting timing: every round ends either paid with its keys sold or
+     expired with its keys released, never a mixture.
+  They check the tables afterwards, not only what the calls returned.
+- **They were shown to fail.** With the reservation swapped for a naive
+  version (read the available keys, then update them, no lock), test 1
+  reported 20 orders for 1 key and test 2 reported 20 orders for 5 keys.
+- **My first version of test 1 could not fail,** and I only found out by
+  doing that swap. A connection pool opens its connections one at a time, so
+  one buyer got a connection about 200 ms before the others and finished
+  before they started. The test passed without two transactions ever
+  meeting, even with the naive query. `warmUp` now opens every connection
+  before the gate is released.
+- **What the tests are and are not:** they are strong evidence that the
+  property held in the runs made (tests 1 to 3 passed 10 times each in a
+  row). They are not a proof. The guarantee itself is PostgreSQL's row lock.
+- **`-p 1`:** the Go packages' tests share one database. The checkout tests
+  add a temporary product while they run, and the catalog tests count
+  products, so packages are run one at a time.
+- **The race detector** (`go test -race`) runs in CI. It could not run on
+  this PC, which has no C compiler.
+
+## 66. Shortcuts in checkout
+
+- Keys are stored as plain text in the database. A real shop would encrypt
+  them at rest.
+- No email with the keys. They stay on the order page.
+- No refunds, no cancel button, no invoices, no tax, no guest checkout.
+- The simulated payment endpoint lets the buyer choose the outcome. That is
+  the point of a simulation, and the Stripe phase replaces it.
+

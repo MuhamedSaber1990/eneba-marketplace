@@ -133,11 +133,11 @@ products(id, slug UNIQUE, title, name, description, platform, region, genre,
 sellers(id, name, rating, sales_count)
 offers(id, product_id, seller_id, price_cents, UNIQUE(product_id, seller_id))
 keys(id, offer_id, code, status [available|reserved|sold],
-     order_item_id NULL, reserved_until NULL)
+     order_item_id NULL)
 
-orders(id, user_id, status [pending|paid|failed|expired], total_cents,
-       payment_ref, created_at, paid_at)
-order_items(id, order_id, offer_id, product_name, seller_name,
+orders(id UUID, user_id, status [pending|paid|failed|expired], total_cents,
+       expires_at, payment_ref, created_at, paid_at)
+order_items(id, order_id, offer_id, product_slug, product_name, seller_name,
             unit_price_cents, quantity)
 
 home_layout(position, block_type, title, see_all_url, enabled)
@@ -172,7 +172,7 @@ plus the foreign keys used in listings.
 | POST `/api/cart/price` | | re-prices cart lines, reports stock |
 | POST `/api/orders` | yes | creates the order, reserves keys, returns a payment URL |
 | GET `/api/orders`, `/api/orders/{id}` | yes | history; keys shown only when paid and owned |
-| POST `/api/payments/simulate` | yes | simulated mode only: succeed or decline |
+| POST `/api/orders/{id}/pay` | yes | simulated payment: approve or decline |
 | POST `/api/stripe/webhook` | signature | marks the order paid and the keys sold |
 
 ## Homepage blocks
@@ -224,24 +224,29 @@ As built (the details and the reasons are in DECISIONS.md, entries 42 to 47):
 
 ## Checkout and keys
 
-1. `POST /api/orders` runs one transaction: read current prices, pick the keys
-   with `SELECT ... FOR UPDATE SKIP LOCKED` so two buyers cannot take the same
-   key, mark them reserved for 30 minutes, insert the order as `pending`.
-   Not enough stock rolls everything back and returns which line failed.
-2. Payment, chosen by `PAYMENT_MODE`:
-   - `stripe`: create a hosted Checkout session in test mode and redirect.
-     Stripe calls the webhook; the handler verifies the signature, then marks
-     the order `paid` and the keys `sold`. Running it twice changes nothing.
-   - `simulated`: a local payment page with "pay" and "decline". Used by tests
-     and by anyone running the project without Stripe keys.
-3. The order page polls until the status is `paid`, then shows the keys with a
-   copy button. Keys are returned only to the order's owner and only when paid.
-4. Expired reservations need no scheduled job: a reserved key whose
-   `reserved_until` has passed counts as available in the reservation query.
+As built (the reasons are in DECISIONS.md, entries 57 to 66):
 
-Tests: two concurrent orders for the last key (one succeeds), a declined payment
-releases the keys, a repeated webhook is harmless, another user cannot read the
-order, signed-out requests get 401.
+1. `POST /api/orders` runs one transaction: release expired reservations,
+   read current prices from the database, compare the total with the one the
+   buyer saw, insert the order as `pending` with a deadline 15 minutes away,
+   and reserve the keys with `SELECT ... FOR UPDATE SKIP LOCKED` so two
+   buyers cannot take the same key. If any line cannot be filled, everything
+   rolls back.
+2. Payment is simulated in this phase: `POST /api/orders/{id}/pay` with an
+   approved or declined outcome. It locks the order row, so paying twice
+   changes nothing. Approved marks the keys sold and the order paid; declined
+   marks it failed and releases the keys. The Stripe phase calls the same
+   function from its webhook.
+3. The order page counts down the reservation, then shows the keys with a
+   copy button. Keys are returned only to the order's owner and only when
+   paid.
+4. Expired reservations need no scheduled job: a cleanup statement runs at
+   the start of every order creation and every payment.
+
+Tests: 20 buyers for the last key (one succeeds), more demand than stock (no
+partial orders), ten simultaneous payments of one order (sold once), a
+payment colliding with expiry (never a mixed result), another user cannot
+read the order, signed-out requests get 401.
 
 ## Deployment
 

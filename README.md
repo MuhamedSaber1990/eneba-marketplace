@@ -78,6 +78,24 @@ What is not built: email verification, password reset, changing a password,
 deleting an account, two-factor login. Signing up with an email that is
 already registered says so, which does reveal that the account exists.
 
+## Buying something
+
+Add an offer to the cart from a product page, go to checkout (you will be
+asked to sign in), place the order and pay. Payment is simulated: the order
+page has a "Pay (test)" button and a "Simulate a declined card" button. No
+card is asked for and no money moves. After paying, the keys are on the
+order page and stay in your order history.
+
+- Placing an order holds its keys for 15 minutes. If it is not paid by then,
+  it expires and the keys go back on sale.
+- A key cannot be sold twice. The tests that check this start 20 buyers at
+  the same instant against a real database (`backend/checkout/`).
+- If someone else is holding the last key in an unpaid order, you are told
+  it is out of stock, even though it may come back if they do not pay.
+
+Not built: emailing the keys, refunds, cancelling an order, invoices, tax,
+checkout without an account. Keys are stored unencrypted.
+
 ## Search
 
 The search box in the header works from every page. It tolerates typos and
@@ -145,7 +163,7 @@ cmd/server/       entry point for local runs and for Render
 cmd/migrate/      applies the .sql files in migrations/
 cmd/seed/         fills the database with invented products
 migrations/       the database schema, one file per step
-backend/          the API: config, database pool, catalog, homepage and account logic, HTTP routes
+backend/          the API: config, database pool, catalog, homepage, accounts, checkout, HTTP routes
 frontend/         React app (Vite)
 docs/             chat log and design reference
 ```
