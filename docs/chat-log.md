@@ -1289,3 +1289,102 @@ Three new entries in `DECISIONS.md`: CI and how the database tests run, the secu
 2. CI as a signal only (my recommendation), or a real gate on deploys.
 3. Ok to build this. I will commit locally and not push.
 4. Still open from before: your yes for the production migrate and seed, which must come before the push.
+
+### Prompt 10
+
+````text
+1. Container. I like that it proves the migrations and seed work on an empty database, and that no secret is needed.
+
+2. Signal only for now. Write down in DECISIONS.md that Vercel doesn't wait for it and what a real gate would take.
+
+3. Ok, build it. Commit locally, don't push.
+
+4. Production migrate and seed: yes, but do it after the CI and headers work is done and tested locally. Show me which database it is about to touch before you run it, and ask me again before the push.
+````
+
+### Reply 15
+
+CI, the security headers and the server timeouts are built, tested locally and committed. Nothing is pushed and production has not been changed. I am stopped at the step you asked for: showing you the production database before I run anything on it.
+
+## The production database, before I touch it
+
+I ran the migrate command in a new status-only mode, which connects, reads and changes nothing:
+
+```
+production:  database: ep-restless-union-bhfufpzq (from .env.production)
+             pending 001_catalog.sql
+dev:         database: ep-damp-bird-bhgt6sta (from .env)
+             nothing to do, the schema is up to date
+```
+
+Please check in the Neon console that `ep-restless-union-bhfufpzq` is the endpoint of your `main` branch. If it is, say yes and I will run:
+
+```
+go run ./cmd/migrate -env .env.production
+go run ./cmd/seed -env .env.production
+```
+
+The first creates the four tables. The second inserts the same 56 products, 8 sellers, 173 offers and 1,247 keys that `dev` has. I will ask again before pushing.
+
+## What I built
+
+**CI: `.github/workflows/ci.yml`**
+- Go job: `gofmt`, `go vet`, `govulncheck`, then `cmd/migrate` and `cmd/seed` on an empty `postgres:18` container, then `go test`. Version 18 is what your Neon database runs; I checked.
+- Frontend job: `npm ci`, lint, build.
+- Read-only access to the repository, no secrets, and a newer push cancels the older run.
+
+**Security headers: `vercel.json`**
+- The four headers from the plan, on every path, with the strict policy.
+- `PlaceholderPage` no longer uses inline styles. They moved to `PlaceholderPage.css`.
+- `npm run preview` now sends the same headers, read from `vercel.json`, and forwards `/api` to the Go server.
+
+**Server: `cmd/server/main.go`**
+- An `http.Server` with the four timeouts in place of `http.ListenAndServe`.
+
+**One addition you did not ask for**
+- `go run ./cmd/migrate -status`. You wanted to see which database a run would touch, and the command had no way to show that without also migrating. It is 20 lines and is what produced the output above.
+
+**Docs**
+- `DECISIONS.md` entries 28 to 31. Entry 28 says that Vercel does not wait for CI and what a real gate would take.
+- A "Checks" section in the README.
+
+## What I checked, and how
+
+- **Workflow file:** `actionlint` reports no problems.
+- **Each CI step, run by hand here:** formatting, `go vet`, `govulncheck` ("No vulnerabilities found"), the Go tests, lint and build all pass.
+- **Headers, in a real browser:** I served the built site with the headers and drove it with headless Chromium.
+  - All four headers arrive.
+  - The store shows 20 cards and all 20 covers load.
+  - All four font weights load (400, 600, 700, 800) and the stylesheet applies.
+  - Filtering, clearing, paging and opening a product all work, and the product cover loads.
+  - The app itself caused zero policy violations, zero console errors and zero failed requests.
+- **That the policy is really enforced:** I injected an inline script, an inline style and an image from another domain into the page. All three were blocked, and the script did not run.
+- **Timeouts:** a connection that sends half a request and then stalls is closed by the server after 5.0 seconds.
+
+## What is not verified
+
+- **The workflow has never run on GitHub.** I cannot run GitHub Actions on this PC. The file is valid and each command works here, but the container setup is only proven by the first push. If that run fails I will fix it right away.
+- **The headers on Vercel itself.** Locally they come from Vite reading the same file. After the push I will check the live URL with `curl -I` and the same browser test.
+- My first timeout test gave a false failure because it connected to `localhost` and reached a different listener. Run against `127.0.0.1` it passed. I mention it so the result above is not taken as more than one clean run.
+
+## Tools installed
+
+- **govulncheck** (Go team), in `~/go/bin`. To run the vulnerability check locally.
+- **actionlint** 1.7.12, in `~/.local/bin`, checksum verified. To validate the workflow file.
+- For the browser test I used the Chromium that Playwright had already downloaded on this PC, with a throwaway script outside the repository. The shared automation browser was busy in another session again.
+
+None of these is a project dependency. `go.mod` and `package.json` are unchanged.
+
+## How to try it yourself
+
+```
+cd ~/eneba-marketplace
+go run ./cmd/migrate -status                        # which database, what is pending
+go run ./cmd/server                                 # terminal 1
+cd frontend && npm run build && npm run preview     # terminal 2, http://localhost:4173
+```
+In the browser's developer tools, the Network tab shows the headers on the page request, and the Console stays empty of policy errors.
+
+## State of the repository
+
+13 local commits are waiting, phase 2 plus this work. Waiting for your yes on the production run.
