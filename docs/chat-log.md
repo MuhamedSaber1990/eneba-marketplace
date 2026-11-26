@@ -1598,3 +1598,98 @@ It was the phase 1 placeholder. `/api/health` stays for checking the deployment.
 4. Ask before pushing. The waiting chat log commits go out with that push.
 
 Tell me if this is ok, or which of the eight decisions you want changed.
+
+### Prompt 14
+
+````text
+Plan is ok, all eight decisions are fine with me. Go ahead and build it.
+
+Two small things: say clearly in the README that the best sellers numbers and the deals are invented seed data, and add each of these decisions to DECISIONS.md with the reason so I can go back to them.
+````
+
+### Reply 19
+
+Phase 3 is built and working locally against `dev`. Production is untouched and nothing is pushed. One correction to something I told you earlier is in here too.
+
+## What I built
+
+**Database: `migrations/002_home.sql`** (64 lines, commented)
+- `home_layout`, `banners`, `deals`, `product_sales`.
+- `products.title`, filled for the existing rows from their names.
+
+**Backend: `backend/home/`, one file per block**
+- `layout.go` reads the layout and drops disabled rows and unknown types.
+- `banners.go`, `deals.go`, `bestsellers.go`, `newreleases.go`, `platforms.go`: each has its own query against its own source.
+- Six endpoints: `GET /api/home` and `GET /api/home/{banners, deals, best-sellers, new-releases, platforms}`. Each answers `{"items": [...]}` with a 60-second edge cache header.
+
+**Seed**
+- Now works in sections and fills only what is empty. On `dev` it left the catalog alone and added 5 layout blocks, 3 banners, 56 sales rows and 8 deals. A second run changed nothing.
+
+**Frontend**
+- `HomePage.tsx` holds one map from block type to component and draws whatever list the API sends.
+- `src/blocks/`: banner, deals (with a countdown that refreshes each minute), a product row used by best sellers and new releases, and platform tiles.
+- The "System status" panel is gone.
+
+## What you asked for
+
+- **README:** a new "About the data" section says that everything is invented, and names the two things that look like facts and are not: the best sellers ranking (random numbers, nothing was sold) and the deals (no price was ever higher). It also states that a price does not go back up when a deal ends.
+- **DECISIONS.md:** all eight decisions are there with their reasons, as entries 32 to 39. Entries 40 and 41 cover two things that came up while building (below).
+
+## A correction to something I told you
+
+In the security headers work I said the policy `style-src 'self'` blocks React's `style={...}` prop, and I moved two styles out of `PlaceholderPage` because of it. That was wrong. React applies that prop through the browser's style object and does not write a `style` attribute, and the policy allows it. I found out because the banner block passes its two colors that way and showed zero policy violations when tested. The earlier change was unnecessary but harmless. Entry 29 in `DECISIONS.md` now carries the correction.
+
+## Things that came up while building
+
+- **I can see screenshots now**, by running my own headless browser, and looking at one found two real problems that measuring had missed:
+  - Long titles such as "WITCHLIGHT" were cut off at the cover's edge. This has been wrong on the store page since phase 2. Covers now shrink the font until the longest line fits (entry 41).
+  - On a phone the homepage was wider than the screen. Hidden screen-reader text inside the scrolling rows was the cause. Fixed with one CSS line, explained in a comment.
+- **Vitest added** as a development dependency, for the countdown and price formatting tests. The plan promised a countdown test and there was no frontend test runner (entry 40). CI's frontend job now runs it, which is a change to the workflow I had said would not need one.
+- **`API_URL` for the dev proxy.** Port 8080 was taken by an API you had running (started 12:39, phase 2 code), so my first browser run tested the old code and showed "homepage could not be loaded". I left your process alone and made the proxy target configurable instead. If you still have that server open, restart it to get the new endpoints.
+
+## What I checked
+
+- **Go:** `go vet`, `govulncheck` and all tests pass. New: 6 layout cases and 6 discount cases without a database, and 6 database tests. The database tests check that every deal is in its time window, in stock, cheaper than before and matches an offer on its product page; that best sellers fall in order and are never sold out; that new releases show no game twice and start with the newest game; and that each platform tile's count equals what the store lists for that filter.
+- **Frontend:** lint, build and 13 unit tests pass.
+- **Browser, under the security headers:**
+  - Five blocks in the order the API gives: 3 banners, 6 deals, 6 best sellers, 6 new releases, 4 platform tiles. All 18 covers load.
+  - Zero policy violations and zero console errors.
+  - Deals endpoint forced to fail: the other four blocks still render.
+  - Layout changed on the fly (reordered, one renamed, an unknown type added): the page followed it and skipped the unknown block.
+  - Layout endpoint forced to fail: the page says so and links to the store.
+  - A platform tile opens the store with 18 Xbox products.
+  - Phone width: no sideways scroll, rows scroll inside themselves.
+- I looked at full-page screenshots at 1440px and 375px after the fixes.
+
+## Not verified
+
+- **The 60-second edge cache.** The header is sent, but only Vercel acts on it. I will check after the deploy that repeat requests are served from the cache.
+- **The new CI step** (`npm test`) has not run on GitHub yet.
+- Best sellers shows "Quiet Harbor" twice, as two editions. That follows from ranking per product, which you approved, but it is visible, so I am pointing it out.
+
+## How to try it
+
+```
+cd ~/eneba-marketplace
+go test ./... && (cd frontend && npm test)
+go run ./cmd/server                    # restart yours if it is still running
+cd frontend && npm run dev             # http://localhost:5173
+```
+To see a block move, change the layout in the `dev` database, for example `UPDATE home_layout SET enabled = false WHERE block_type = 'deals';`, wait a moment and reload.
+
+## Production: your approval
+
+Status check, which changes nothing:
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+pending 002_home.sql
+```
+That is the `main` endpoint you confirmed last time. With your yes I will run:
+```
+go run ./cmd/migrate -env .env.production
+go run ./cmd/seed -env .env.production
+```
+- The migration adds one column to `products` and creates four tables. The live site keeps working during and after it, since the current code does not use any of them.
+- The seed will skip the catalog and add the homepage rows. **It lowers the price of 8 offers on the live store**, because that is how deals work here. Those are the only existing rows it changes.
+
+I will show you the counts afterwards and ask again before pushing. There are 8 local commits waiting.
