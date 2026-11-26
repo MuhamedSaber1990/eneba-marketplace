@@ -3110,3 +3110,129 @@ Saved cards, subscriptions, tax, invoices, Apple Pay or Google Pay setup, refund
 1. Ok to set `DEMO_RESTOCK=1` on Vercel and push the restock.
 2. Ok on the phase 7 plan, in particular the 35-minute reservation in Stripe mode and the automatic refund for a late payment.
 3. Tell me when `.env.stripe` exists, or that you added the two variables yourself.
+
+### Prompt 27
+
+````text
+.env.stripe is there, with STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.
+
+The key is a restricted test key called keybay-server, with write on Checkout Sessions and on Charges and Refunds, nothing else. The webhook endpoint is keybay-live-site, pointing at https://eneba-marketplace-nine.vercel.app/api/stripe/webhook, with the four checkout.session events. The account is new and in test mode (a sandbox), my email isn't verified yet.
+
+Don't print either value. Put them into Vercel when you get to that step and delete the file afterwards like you said.
+````
+
+### Reply 32
+
+Phase 7 is built, tested and committed locally. Nothing is on the live site yet: no secrets in Vercel, no production migration, no push. I have stopped before those steps and list them at the end.
+
+**How I read your message.** You did not answer my three questions directly, but you prepared everything for Stripe and told me what to do with the secrets "when you get to that step". I took that as approval of the phase 7 plan and built it. I did not take it as approval to push or to change Vercel, so I have not done either. If I read too much into it, say so and nothing is lost: it is all local.
+
+**The secrets.** I checked `.env.stripe` without printing it: it is git-ignored and holds both variables, one starting `rk_test_` and one starting `whsec_`. I used the key once, locally, to run the server in Stripe mode. It was loaded straight into the server's environment and never displayed or logged. The file is still there, because the Vercel step has not happened yet.
+
+## What I built
+
+**Database: `migrations/006_payments.sql`** (14 lines): two columns on `orders`, the payment page's address and a refund reference.
+
+**Backend**
+- `backend/payments/stripe.go`: creates Stripe's payment page for an order, and issues refunds. The only place Stripe's library is used.
+- `backend/payments/webhook.go`: checks a webhook's signature and reduces the event to what the shop needs.
+- `backend/checkout/provider.go`: starting a payment, handling "paid", handling "the page closed". It talks to a small `Gateway` interface, not to Stripe.
+- `POST /api/orders/{id}/checkout` and `POST /api/stripe/webhook`.
+- `PAYMENT_MODE`, read in one function that both entry points share.
+
+**Frontend:** the order page shows "Pay with card" and the test card number in Stripe mode, "Confirming your payment" after returning, and a notice if a payment was refunded.
+
+**One new dependency:** `stripe-go`. `govulncheck` is clean.
+
+## Three things that differ from the plan
+
+**1. The reservation is not 35 minutes for everyone.** That was my proposal, and it was worse than it needed to be: an abandoned order would have held stock for 35 minutes without anyone going to pay. What I built instead:
+- a new order holds its keys for 15 minutes, as before;
+- clicking through to Stripe creates a payment page that closes after 31 minutes and moves the order's deadline to 36 minutes from that click;
+- the 5 minutes between are for Stripe's message to arrive.
+
+**2. Stripe was going to charge in Norwegian kroner.** I only saw this by looking at a screenshot of Stripe's page. It offered "NOK 95.72" next to "€8.59", with a 4% conversion fee, and had the kroner option selected. A payment made that way would not have matched the order's euro total, so my own check would have refused it and refunded it. Every buyer outside the eurozone would have hit that. I switched the feature off when creating the page (`adaptive_pricing: false`), and the page now shows only the euro price.
+
+**3. A payment that does not match the order is refunded too,** not only a late one: wrong payment page, wrong amount or wrong currency. Money that cannot become keys always goes back.
+
+## What happens to the simulated buttons, as built
+
+- In `stripe` mode the order page shows only "Pay with card".
+- The simulated endpoint is not hidden but gone: it answers 404, even to a signed-in user. I tested that through the router, and again in a real browser against the local server in Stripe mode.
+- In `simulated` mode, the default, everything works as before and the Stripe routes answer 404.
+- If the mode is `stripe` and a key is missing, paying is refused with "Card payments are not available right now". It does not fall back to free payments.
+
+## What I checked
+
+**Go: all six packages pass.**
+- **Webhook signature, no Stripe account needed** (Stripe's library signs test payloads):
+  - a correctly signed event is read correctly;
+  - "completed but still unpaid" is not treated as paid;
+  - refused: no signature, a signature made with another secret, a body changed after signing, a genuine request replayed ten minutes later, and any request while our secret is empty.
+- **Paying through the provider, with a fake gateway:**
+  - one payment page per order, the same address on a second request, the deadline moved to about 36 minutes;
+  - if Stripe is down, nothing is saved and trying again works;
+  - a "paid" message fulfils the order, and three repeats change nothing;
+  - ten deliveries of the same message at once fulfil it exactly once;
+  - a payment for an expired order is refunded once, also when the message repeats;
+  - a wrong page, amount or currency is refunded and the order is not fulfilled;
+  - a message for an unknown order is ignored;
+  - a closed payment page releases the keys, a message about another page changes nothing, and a paid order stays paid.
+- **HTTP level:** which routes exist in which mode, and the webhook's signature check through the real router with no cookie and no Origin.
+
+**Frontend:** lint, build and 59 unit tests pass.
+
+**With the real Stripe test key, on this PC**
+1. The order page showed one button, "Pay €10.59 with card".
+2. Clicking it went to `checkout.stripe.com`. So your restricted key has the access it needs.
+3. Stripe's page showed the product, "Sold by" the seller, and the euro price only.
+4. I chose "Card", entered `4242 4242 4242 4242`, and paid.
+5. Stripe sent the browser back to `/orders/<id>?checkout=done`, and the page showed "Confirming your payment".
+6. Asking for the payment page again returned the same Stripe page.
+
+Your unverified email did not get in the way of any of this.
+
+## Not verified, and it is the part that matters most
+
+**Fulfilment through the webhook has not happened for real.** Stripe sends its webhook to the live address, and the live site does not have the code yet. So in step 5 above the page waited and nothing arrived, which is correct for that setup. Everything the webhook does is covered by tests with signed events and a fake gateway, but the first real "Stripe told us, and keys appeared" will be on the live site after the push. If it fails, the simulated mode is one variable away.
+
+Also not verified:
+- **A real refund.** The refund call to Stripe is tested only with the fake. I can provoke one on the live site if you want to see it.
+- **A declined card,** which I will try on the live site.
+- **That my automation of Stripe's page keeps working.** It took several attempts: the form sits in an iframe and "Card" has to be chosen first. Stripe changes that page whenever it likes. If it breaks, I will ask you to make the test payment by hand.
+
+## Side effects to know about
+
+- **Stripe will have failed webhook deliveries in its log.** My local test payment produced an event that Stripe sent to the live address, which answered 404. Stripe retries for a while. Once the code is live, the retry is accepted and ignored, because that order exists only in the dev database.
+- **On `dev`** I ended the demo account's unpaid test orders twice, to get under the limit of 3 unpaid orders that my own test runs had hit. That limit worked as intended.
+- **A small logging fix:** requests cancelled by the visitor (closing a tab) were logged as server errors. They are now skipped.
+
+## How to try it locally
+
+Simulated mode needs nothing new:
+```
+cd ~/eneba-marketplace && go test -p 1 ./...
+```
+Stripe mode locally needs the variables from `.env.example` in your `.env`, and gets as far as "Confirming your payment" for the reason above.
+
+## What I need from you
+
+Four steps, in this order. Tell me which you approve.
+
+**1. Production migration.**
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+pending 006_payments.sql
+```
+It adds two empty columns to `orders`. Nothing existing changes.
+
+**2. Vercel settings, all for Production:**
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, piped from `.env.stripe` as sensitive variables without being printed. Then I delete the file.
+- `PAYMENT_MODE=stripe` and `APP_URL=https://eneba-marketplace-nine.vercel.app`.
+- `DEMO_RESTOCK=1`, which I asked about last time and you have not answered yet.
+
+**3. Push.** 8 local commits: the restock, phase 7, screenshots and chat log entries.
+
+**4. After the push I will:** check CI, pay for an order on the live site with the test card and confirm the keys arrive through the webhook, try the declined card, and confirm the simulated endpoint answers 404 there.
+
+If you want the old behavior back at any point, changing `PAYMENT_MODE` to `simulated` and redeploying restores the two buttons.
