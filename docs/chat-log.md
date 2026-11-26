@@ -2312,3 +2312,130 @@ Email verification, password reset, changing a password, deleting an account, tw
 4. Ask before pushing. Waiting locally: screenshots, the ranking change, the chat log.
 
 Tell me if the plan is ok, and what you want changed in the six points or the five decisions.
+
+### Prompt 21
+
+````text
+Plan is ok, the six points and the five decisions are all fine. Build it. The demo account in the seed is fine too.
+
+One thing to think about: with the 5 failed attempts limit, anyone can lock the demo account for 15 minutes, and a reviewer might hit that. Tell me how you'd handle it, the simple way is fine, like a note in the README that they can also sign up with any email.
+````
+
+### Reply 26
+
+Phase 5 is built and working locally against `dev`. Production is untouched and nothing is pushed.
+
+## The demo account and the lockout
+
+I did both the simple thing and a small real fix.
+
+- **The fix:** the demo account is left out of the per-email limit. A column `users.is_demo` marks it, and sign-in skips that one limit for it. The reason this is safe: the limit exists to stop password guessing, and this password is printed in the README. Locking the account protects nothing and only lets anyone keep reviewers out. The per-IP limit still applies to it.
+- **The note:** the README says reviewers can sign up with any email, and that nothing is sent to the address.
+- **Tested:** 7 wrong passwords on a demo-flagged account are each answered normally, and the right password then works. A normal account is refused from the 6th attempt.
+- It is entry 54 in `DECISIONS.md`.
+
+## What I built
+
+**Database: `migrations/004_auth.sql`** (44 lines, commented): `users`, `sessions`, `auth_attempts`.
+
+**Backend: `backend/auth/`**
+- `password.go`: the rules and bcrypt at cost 12.
+- `session.go`: the random token, its hash, expiry, sign out.
+- `ratelimit.go`: counting attempts in the database.
+- `auth.go`: sign up and sign in.
+- Handlers in `httpapi/auth.go`: the cookie, the Origin check, JSON only, and `requireUser`.
+- Four endpoints: `POST /api/auth/signup`, `/signin`, `/signout`, and `GET /api/auth/me`.
+
+**Seed:** a third section that creates `demo@keybay.test`. `-reset` deletes only the demo account. Accounts that people created are never touched by it.
+
+**Frontend**
+- One page component for "Log in" and "Create an account".
+- An account page behind a route guard.
+- The header shows your email when signed in.
+- `safeNextPath`, which only allows returning to a path on this site.
+
+**One new dependency:** `golang.org/x/crypto`, for bcrypt. `govulncheck` reports no vulnerabilities.
+
+## The six points, as built
+
+| Point | Status | How |
+|---|---|---|
+| Password hashing | proper | bcrypt cost 12, 8 characters minimum, 72 bytes maximum, hash never leaves the backend |
+| Cookie flags | proper | `__Host-session`, HttpOnly, Secure, SameSite=Lax, Path=/, 7 days. Only a SHA-256 hash of the token is stored |
+| CSRF | proper, no token | SameSite=Lax, an Origin check on every changing route, JSON only |
+| Expiry and sign out | proper, 2 shortcuts | checked in the query on every request; sign out deletes the row. No "sign out everywhere", no sliding expiry |
+| Attempt limits | working, with gaps | 5 per email and 30 per IP in 15 minutes, 10 sign-ups per IP per hour. A known email can be locked for 15 minutes by anyone |
+| Hiding whether an email exists | sign in proper, sign up a shortcut | identical answer and identical work on sign in; sign up says "already exists" |
+
+All of it is written up with reasons in `DECISIONS.md`, entries 49 to 56.
+
+## Things that came up while building
+
+1. **The Origin check broke local sign-in at first.** Vite's short proxy form rewrites the `Host` header to the API's own address, so the API saw every sign-in as coming from another site and refused it. This was the check working as designed against a misconfigured proxy. The proxy now passes the header through, with a comment explaining why. It does not affect Vercel, where there is no proxy.
+2. **Logging out landed on the sign-in page.** The account page is protected, so clearing the user while still on it triggered the route guard. Log out now leaves the page first and lands on the homepage.
+3. **The dummy hash is a constant.** I first computed it at startup, which would have added a few hundred milliseconds to every cold start of the function. A test checks the constant is a real bcrypt hash of cost 12, so a typo cannot silently remove the timing protection.
+4. **The client IP on Vercel.** Vercel's documentation says it overwrites `X-Forwarded-For` and does not pass on what a visitor sends, so the address cannot be forged there. I am relying on the documentation and did not test it myself.
+5. **I added `INSECURE_COOKIES=1` to your `.env`.** It is not a secret, and without it sign-in does not work on plain `http://localhost`. It is also in `.env.example`. It is not set on Vercel.
+
+## What I checked
+
+**Go tests**
+- Without a database: password and email rules (21 cases), salted hashing, the token and its hash, the Origin check (10 cases, including a lookalike subdomain and `Origin: null`), the client IP (4 cases).
+- Through the real router and the `dev` database:
+  - sign up, `me` works, sign out, `me` refused, and a new sign in gets a different token;
+  - the cookie's flags read back from the response: HttpOnly, Secure, SameSite=Lax, Path=/, no Domain, 7 days;
+  - no password material in any response;
+  - the stored password is a cost-12 bcrypt hash and the stored session is not the token;
+  - an expired session is refused;
+  - a duplicate email is refused, also in upper case and with spaces;
+  - a wrong password and an unknown email give byte-identical responses;
+  - the 6th failed sign-in gets 429, the right password is then refused too, and an unknown email is limited the same way;
+  - the demo exemption;
+  - 8 forged or malformed requests are refused (another site, no Origin, a plain form, no content type, broken JSON, GET for sign out), and the session survives a forged sign out.
+- Each test uses its own random email and address and deletes its rows afterwards.
+
+**Frontend:** lint, build and 31 unit tests pass, 14 of them for `safeNextPath`.
+
+**Browser, under the security headers**
+- `/account` while signed out goes to `/signin?next=%2Faccount`, and the link to "Create an account" keeps the destination.
+- Sign up lands on `/account`, with the email shown on the page and in the header.
+- `document.cookie` is empty: JavaScript cannot see the session.
+- A reload keeps you signed in.
+- Log out lands on the homepage, the header shows "Log in | Register", and no cookie is left.
+- A wrong password shows "Wrong email or password." as an alert. The right one returns to `/account`.
+- `/signin?next=https://evil.example/steal` ends on our homepage after signing in, not on the other site.
+- Signing up again with the same email in upper case says the account exists. A 5-character password is refused with a clear message.
+- The demo account signs in.
+- Zero policy violations. I looked at screenshots of the sign-in page with an error, and at phone width.
+
+## Not verified
+
+- **The production cookie.** Locally the browser test ran with the insecure setting, so the cookie there was named `session` without Secure. The secure form is covered by the Go test. After the deploy I will read the real cookie from the live site and confirm the `__Host-` name and all flags.
+- **The Origin check on Vercel.** It compares the request's host with the Origin. I expect Vercel to pass the public host to the function, and I accept the forwarded-host header as well in case it does not. If sign-in is refused on the live site, this is where I will look first, and I will tell you.
+- **bcrypt's speed on Vercel.** Cost 12 took a few hundred milliseconds here. I will time a live sign-in.
+
+## How to try it locally
+
+```
+cd ~/eneba-marketplace
+go run ./cmd/server                    # restart yours to pick up the new routes and .env
+cd frontend && npm run dev             # restart too: the proxy setting changed
+```
+Then open http://localhost:5173/account. Sign up, reload, log out, and try the demo account `demo@keybay.test` / `keybay-demo-2026`.
+
+## Production: your approval
+
+Status check, which changes nothing:
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+pending 004_auth.sql
+```
+With your yes I will run:
+```
+go run ./cmd/migrate -env .env.production
+go run ./cmd/seed -env .env.production
+```
+- The migration creates three new tables and changes no existing one.
+- The seed will skip the catalog and the homepage and add one row: the demo account.
+
+Then I will ask before pushing. 8 local commits are waiting, including the in-stock ranking change and the search screenshots.
