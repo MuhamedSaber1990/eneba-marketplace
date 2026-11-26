@@ -93,6 +93,12 @@ order page and stay in your order history.
 - If someone else is holding the last key in an unpaid order, you are told
   it is out of stock, even though it may come back if they do not pay.
 
+- On the live demo, stock is topped up automatically so the store cannot be
+  bought empty. Paying is free there and the demo password is public, so
+  without this anyone could buy every key. When a sale leaves an offer with
+  fewer than 3 keys, 5 new ones are generated. The setting is `DEMO_RESTOCK`,
+  and it is off by default and in the tests.
+
 Not built: emailing the keys, refunds, cancelling an order, invoices, tax,
 checkout without an account. Keys are stored unencrypted.
 

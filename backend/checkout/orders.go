@@ -321,6 +321,11 @@ func (s *Store) Pay(ctx context.Context, userID int64, orderID string, approved 
 		if err := markPaid(ctx, tx, orderID); err != nil {
 			return Order{}, err
 		}
+		if s.RestockSold {
+			if err := restockLowOffers(ctx, tx, orderID); err != nil {
+				return Order{}, err
+			}
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -18,6 +18,11 @@ type Config struct {
 	// session cookie. It exists for plain http://localhost and must stay
 	// false anywhere real.
 	InsecureCookies bool
+
+	// DemoRestock makes the store add fresh keys to an offer that runs low
+	// after a sale, so the public demo cannot be bought empty. See
+	// backend/checkout/restock.go. A real shop would leave it off.
+	DemoRestock bool
 }
 
 // API carries what the handlers need. Handlers are methods on it, so they can
@@ -37,13 +42,16 @@ type API struct {
 // db may be nil when DATABASE_URL is missing. The health check reports that,
 // and every other route answers 503 instead of crashing.
 func NewRouter(db *pgxpool.Pool, config Config) http.Handler {
+	checkoutStore := checkout.NewStore(db)
+	checkoutStore.RestockSold = config.DemoRestock
+
 	api := &API{
 		db:       db,
 		config:   config,
 		catalog:  catalog.NewStore(db),
 		home:     home.NewStore(db),
 		auth:     auth.NewStore(db),
-		checkout: checkout.NewStore(db),
+		checkout: checkoutStore,
 	}
 
 	mux := http.NewServeMux()

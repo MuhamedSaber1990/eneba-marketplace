@@ -37,6 +37,7 @@ func main() {
 		Handler: httpapi.NewRouter(pool, httpapi.Config{
 			// Set INSECURE_COOKIES=1 in .env for plain http://localhost.
 			InsecureCookies: os.Getenv("INSECURE_COOKIES") == "1",
+			DemoRestock:     os.Getenv("DEMO_RESTOCK") == "1",
 		}),
 
 		ReadHeaderTimeout: 5 * time.Second,  // time to send the request line and headers

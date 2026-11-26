@@ -35,6 +35,11 @@ func (e ValidationError) Error() string { return e.Message }
 // Store runs the checkout queries.
 type Store struct {
 	db *pgxpool.Pool
+
+	// RestockSold switches on the demo restock (see restock.go): after a
+	// sale, an offer that is running low gets freshly generated keys. It is
+	// off unless set, and it is set only for the public demo site.
+	RestockSold bool
 }
 
 func NewStore(db *pgxpool.Pool) *Store {

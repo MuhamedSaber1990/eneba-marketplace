@@ -845,3 +845,29 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - The simulated payment endpoint lets the buyer choose the outcome. That is
   the point of a simulation, and the Stripe phase replaces it.
 
+## 67. The live demo restocks itself
+
+- **The problem:** on the public site paying costs nothing (payment is
+  simulated, or uses free test cards once Stripe is in), and the demo
+  account's password is published. Anyone could buy every key and leave the
+  store sold out before the project is reviewed.
+- **What was built:** when a sale leaves an offer with fewer than 3 available
+  keys, the same transaction adds 5 newly generated ones
+  (`backend/checkout/restock.go`). It runs only where `DEMO_RESTOCK=1` is
+  set, which is the Vercel project and nowhere else.
+- **Why this and not something else:**
+  - A cap on purchases per account does nothing: anyone can register another.
+  - Making the demo account's purchases free of consequences would put a
+    special case in the middle of the checkout logic.
+  - Reseeding by hand before the interview works, but it deletes every
+    order, including a reviewer's, and has to be remembered.
+- **What it keeps:** stock still goes down after a purchase, reserving the
+  last key still behaves correctly, and the three products seeded as sold
+  out stay sold out, because nothing can be sold from them.
+- **What it costs:** a real shop cannot invent stock, so this is a demo
+  device and is described as one in the README. The tests that check exact
+  stock run with it off, which is the default. It has its own tests, which
+  switch it on.
+- **Two payments for the same offer at the same moment** could both top it
+  up, adding 10 keys where 5 were meant. That is harmless here.
+
