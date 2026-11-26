@@ -1,20 +1,17 @@
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { getFilters } from '../api/catalog'
+import { useAsync } from '../lib/useAsync'
 import './Header.css'
-
-// Links in the bar under the search box. They point at store filters that
-// arrive in phase 2. Until then the store route shows a placeholder.
-const NAV_LINKS = [
-  { label: 'All products', to: '/store' },
-  { label: 'Steam', to: '/store?platform=steam' },
-  { label: 'PlayStation', to: '/store?platform=playstation' },
-  { label: 'Xbox', to: '/store?platform=xbox' },
-  { label: 'Nintendo', to: '/store?platform=nintendo' },
-]
 
 export function Header() {
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
+
+  // The category bar lists the platforms that exist in the catalog. If the
+  // request fails, the bar still shows "All products".
+  const filters = useAsync(getFilters, 'filters')
+  const platforms = filters.status === 'ready' ? filters.data.platforms : []
 
   function handleSearch(event: FormEvent) {
     event.preventDefault()
@@ -58,9 +55,10 @@ export function Header() {
         </div>
 
         <nav className="header__nav" aria-label="Categories">
-          {NAV_LINKS.map((link) => (
-            <Link key={link.to} to={link.to}>
-              {link.label}
+          <Link to="/store">All products</Link>
+          {platforms.map((platform) => (
+            <Link key={platform} to={`/store?platform=${encodeURIComponent(platform)}`}>
+              {platform}
             </Link>
           ))}
         </nav>

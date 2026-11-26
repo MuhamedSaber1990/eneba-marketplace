@@ -3,6 +3,8 @@ import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { HomePage } from './pages/HomePage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { ProductPage } from './pages/ProductPage'
+import { StorePage } from './pages/StorePage'
 
 /** Header and footer around whichever page matches the URL (the Outlet). */
 function Layout() {
@@ -25,7 +27,8 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<HomePage />} />
-        <Route path="/store" element={<PlaceholderPage title="Store" note="The catalog arrives in phase 2." />} />
+        <Route path="/store" element={<StorePage />} />
+        <Route path="/product/:slug" element={<ProductPage />} />
         <Route path="/search" element={<PlaceholderPage title="Search" note="Search arrives in phase 4." />} />
         <Route path="/signin" element={<PlaceholderPage title="Log in" note="Accounts arrive in phase 5." />} />
         <Route path="/signup" element={<PlaceholderPage title="Register" note="Accounts arrive in phase 5." />} />
