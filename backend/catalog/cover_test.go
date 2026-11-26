@@ -56,22 +56,6 @@ func TestRenderSVGEscapesText(t *testing.T) {
 	}
 }
 
-func TestEscapeLike(t *testing.T) {
-	tests := []struct{ name, in, want string }{
-		{"plain text is unchanged", "crown", "crown"},
-		{"percent is escaped", "100%", `100\%`},
-		{"underscore is escaped", "a_b", `a\_b`},
-		{"backslash is escaped", `a\b`, `a\\b`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := escapeLike(tt.in); got != tt.want {
-				t.Errorf("escapeLike(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestTitleFontSize(t *testing.T) {
 	tests := []struct {
 		name  string

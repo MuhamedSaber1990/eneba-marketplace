@@ -33,6 +33,7 @@ func NewRouter(db *pgxpool.Pool) http.Handler {
 	mux.HandleFunc("GET /api/products/{slug}", api.needsDB(api.handleGetProduct))
 	mux.HandleFunc("GET /api/products/{slug}/cover.svg", api.needsDB(api.handleProductCover))
 	mux.HandleFunc("GET /api/filters", api.needsDB(api.handleFilters))
+	mux.HandleFunc("GET /api/search/suggest", api.needsDB(api.handleSuggest))
 
 	// The homepage: one endpoint for the layout, one per block.
 	mux.HandleFunc("GET /api/home", api.needsDB(api.handleHomeLayout))

@@ -48,10 +48,10 @@ type ProductSummary struct {
 type ListParams struct {
 	Platforms     []string
 	Regions       []string
-	Query         string // part of a product name
+	Query         string // search text; see search.go for how it is matched
 	MinPriceCents *int   // nil means no lower limit
 	MaxPriceCents *int   // nil means no upper limit
-	Sort          string // a key of sortClauses
+	Sort          string // a key of sortClauses, or SortRelevance
 	Page          int    // starts at 1
 }
 
@@ -64,11 +64,16 @@ type ListResult struct {
 	TotalPages int              `json:"total_pages"`
 }
 
-// DefaultSort is used when the request does not name a sort order.
+// DefaultSort is used when the request names no sort order and has no search.
 const DefaultSort = "newest"
 
+// SortRelevance orders search results by how well they match. It is the
+// default when the request has a search text. Without one it means nothing,
+// and the listing falls back to DefaultSort.
+const SortRelevance = "relevance"
+
 // sortClauses maps the sort names the API accepts to ORDER BY clauses. The
-// clause is the only part of a query built from a request, and it is always
+// clause is the only part of a query chosen by a request, and it is always
 // one of these fixed strings, never text typed by a visitor. Each clause ends
 // with slug so the order is stable between pages.
 var sortClauses = map[string]string{
@@ -81,7 +86,7 @@ var sortClauses = map[string]string{
 // ValidSort reports whether name is a sort order the API accepts.
 func ValidSort(name string) bool {
 	_, ok := sortClauses[name]
-	return ok
+	return ok || name == SortRelevance
 }
 
 // PricedProducts is the start of every query that shows products with a
@@ -127,32 +132,40 @@ func ScanSummary(row interface{ Scan(dest ...any) error }, extra ...any) (Produc
 	return p, nil
 }
 
-// listFilter always has the same five parameters. A filter that is not in use
-// is passed as an empty array, an empty string or NULL, and its line then
-// lets every row through. The SQL text never changes, so there is nothing to
-// assemble and nothing to inject into.
+// listFilter always has the same six parameters. A filter that is not in use
+// is passed as an empty array or NULL, and its line then lets every row
+// through. The SQL text never changes, so there is nothing to assemble and
+// nothing to inject into.
 //
-//	$1 platforms   $2 regions   $3 name search   $4 min price   $5 max price
+//	$1 platforms   $2 regions   $3 search words   $4 min price   $5 max price
+//	$6 similarity threshold for the search
 const listFilter = `
  WHERE (cardinality($1::text[]) = 0 OR platform = ANY($1::text[]))
    AND (cardinality($2::text[]) = 0 OR region = ANY($2::text[]))
-   AND ($3::text = '' OR name ILIKE '%' || $3::text || '%')
    AND ($4::int IS NULL OR from_price_cents >= $4::int)
-   AND ($5::int IS NULL OR from_price_cents <= $5::int)`
+   AND ($5::int IS NULL OR from_price_cents <= $5::int)` + searchFilter
 
 // List returns one page of products matching the filters.
 func (s *Store) List(ctx context.Context, params ListParams) (ListResult, error) {
-	orderBy, ok := sortClauses[params.Sort]
-	if !ok {
+	if !ValidSort(params.Sort) {
 		return ListResult{}, fmt.Errorf("unknown sort %q", params.Sort)
+	}
+	empty := ListResult{Items: []ProductSummary{}, Page: params.Page, PageSize: PageSize}
+
+	words := SearchWords(params.Query)
+	if strings.TrimSpace(params.Query) != "" && len(words) == 0 {
+		// Something was typed, but nothing searchable ("%", "!!!"). That is a
+		// search with no results, not a request for the whole catalog.
+		return empty, nil
 	}
 
 	filterArgs := []any{
 		emptyIfNil(params.Platforms),
 		emptyIfNil(params.Regions),
-		escapeLike(params.Query),
+		words,
 		params.MinPriceCents,
 		params.MaxPriceCents,
+		similarityThreshold,
 	}
 
 	// First query: how many products match in total, for the pager.
@@ -163,15 +176,52 @@ func (s *Store) List(ctx context.Context, params ListParams) (ListResult, error)
 	}
 
 	// Second query: the rows of the requested page.
-	pageQuery := PricedProducts + `
+	items, err := s.queryPage(ctx, params.Sort, filterArgs, words, PageSize, (params.Page-1)*PageSize)
+	if err != nil {
+		return ListResult{}, err
+	}
+
+	result := empty
+	result.Items = items
+	result.Total = total
+	result.TotalPages = (total + PageSize - 1) / PageSize // rounds up
+	return result, nil
+}
+
+// Suggest returns the best few matches for a search text, for the dropdown
+// under the search box. Text shorter than MinSuggestLength gets no
+// suggestions.
+func (s *Store) Suggest(ctx context.Context, text string) ([]ProductSummary, error) {
+	words := SearchWords(text)
+	if len([]rune(strings.Join(words, ""))) < MinSuggestLength {
+		return []ProductSummary{}, nil
+	}
+	// No platform, region or price filter: only the search words.
+	filterArgs := []any{[]string{}, []string{}, words, nil, nil, similarityThreshold}
+	return s.queryPage(ctx, SortRelevance, filterArgs, words, SuggestLimit, 0)
+}
+
+// queryPage runs the listing query for one page. List and Suggest share it.
+func (s *Store) queryPage(ctx context.Context, sort string, filterArgs []any, words []string, limit, offset int) ([]ProductSummary, error) {
+	args := append(filterArgs, limit, offset) // $7 and $8
+
+	orderBy := sortClauses[sort]
+	switch {
+	case sort == SortRelevance && len(words) > 0:
+		orderBy = relevanceOrder
+		args = append(args, strings.Join(words, " ")) // $9, used only by relevanceOrder
+	case sort == SortRelevance:
+		orderBy = sortClauses[DefaultSort] // nothing to be relevant to
+	}
+
+	query := PricedProducts + `
 		SELECT ` + SummaryColumns + `
 		  FROM priced` + listFilter + `
 		 ORDER BY ` + orderBy + `
-		 LIMIT $6 OFFSET $7`
-	offset := (params.Page - 1) * PageSize
-	rows, err := s.db.Query(ctx, pageQuery, append(filterArgs, PageSize, offset)...)
+		 LIMIT $7 OFFSET $8`
+	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
-		return ListResult{}, fmt.Errorf("listing products: %w", err)
+		return nil, fmt.Errorf("listing products: %w", err)
 	}
 	defer rows.Close()
 
@@ -179,21 +229,14 @@ func (s *Store) List(ctx context.Context, params ListParams) (ListResult, error)
 	for rows.Next() {
 		p, err := ScanSummary(rows)
 		if err != nil {
-			return ListResult{}, fmt.Errorf("reading a product row: %w", err)
+			return nil, fmt.Errorf("reading a product row: %w", err)
 		}
 		items = append(items, p)
 	}
 	if err := rows.Err(); err != nil {
-		return ListResult{}, fmt.Errorf("reading product rows: %w", err)
+		return nil, fmt.Errorf("reading product rows: %w", err)
 	}
-
-	return ListResult{
-		Items:      items,
-		Total:      total,
-		Page:       params.Page,
-		PageSize:   PageSize,
-		TotalPages: (total + PageSize - 1) / PageSize, // rounds up
-	}, nil
+	return items, nil
 }
 
 // Offer is one seller's price for a product.
@@ -330,11 +373,4 @@ func emptyIfNil(values []string) []string {
 		return []string{}
 	}
 	return values
-}
-
-// escapeLike makes % and _ in a search mean themselves. In a LIKE pattern
-// they are wildcards, so without this a search for "100%" would match
-// everything containing "100".
-func escapeLike(text string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(text)
 }

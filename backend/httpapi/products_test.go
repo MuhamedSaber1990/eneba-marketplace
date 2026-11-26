@@ -35,7 +35,9 @@ func TestParseListParams(t *testing.T) {
 		{name: "sort and page", query: "sort=price_asc&page=3", wantSort: "price_asc", wantPage: 3},
 		{name: "prices in euros become cents", query: "min_price=10&max_price=39.99", wantSort: "newest", wantPage: 1, wantMin: intPtr(1000), wantMax: intPtr(3999)},
 		{name: "a price of zero is a real limit", query: "min_price=0", wantSort: "newest", wantPage: 1, wantMin: intPtr(0)},
-		{name: "search text is trimmed", query: "q=++crown++", wantSort: "newest", wantPage: 1, wantQuery: "crown"},
+		{name: "search text is trimmed, and a search sorts by relevance", query: "q=++crown++", wantSort: "relevance", wantPage: 1, wantQuery: "crown"},
+		{name: "a search can still be sorted another way", query: "q=crown&sort=price_asc", wantSort: "price_asc", wantPage: 1, wantQuery: "crown"},
+		{name: "relevance is accepted without a search", query: "sort=relevance", wantSort: "relevance", wantPage: 1},
 
 		{name: "unknown sort", query: "sort=price", wantErr: "unknown sort"},
 		{name: "sort cannot carry SQL", query: "sort=name%3BDROP+TABLE+products", wantErr: "unknown sort"},
@@ -94,7 +96,7 @@ func TestRoutesWithoutDatabase(t *testing.T) {
 	router := NewRouter(nil)
 
 	for _, path := range []string{
-		"/api/products", "/api/products/some-slug", "/api/products/some-slug/cover.svg", "/api/filters",
+		"/api/products", "/api/products/some-slug", "/api/products/some-slug/cover.svg", "/api/filters", "/api/search/suggest?q=kart",
 		"/api/home", "/api/home/banners", "/api/home/deals", "/api/home/best-sellers", "/api/home/new-releases", "/api/home/platforms",
 	} {
 		t.Run(path, func(t *testing.T) {

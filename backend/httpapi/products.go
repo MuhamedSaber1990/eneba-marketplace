@@ -57,6 +57,11 @@ func parseListParams(query url.Values) (catalog.ListParams, error) {
 		return params, fmt.Errorf("q is too long (at most %d characters)", maxQueryLength)
 	}
 
+	// A search is ordered by how well products match, unless the request
+	// asks for something else.
+	if params.Query != "" {
+		params.Sort = catalog.SortRelevance
+	}
 	if sort := query.Get("sort"); sort != "" {
 		if !catalog.ValidSort(sort) {
 			return params, fmt.Errorf("unknown sort %q", sort)
@@ -145,4 +150,24 @@ func (api *API) handleFilters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, filters)
+}
+
+// handleSuggest answers the dropdown under the search box.
+// GET /api/search/suggest?q=thund
+func (api *API) handleSuggest(w http.ResponseWriter, r *http.Request) {
+	text := r.URL.Query().Get("q")
+	if len(text) > maxQueryLength {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("q is too long (at most %d characters)", maxQueryLength))
+		return
+	}
+
+	items, err := api.catalog.Suggest(r.Context(), text)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	// The same text gives the same suggestions for everyone, so Vercel's
+	// edge may answer repeats for a minute without running the function.
+	w.Header().Set("Cache-Control", "public, max-age=0, s-maxage=60")
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
