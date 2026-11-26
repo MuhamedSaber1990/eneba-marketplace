@@ -2106,3 +2106,80 @@ pending 003_search.sql
 With your yes I will run `go run ./cmd/migrate -env .env.production`. It installs the `pg_trgm` extension and changes no table and no data. There is no seed step. The migration has to come before the push, because the new code calls a function that only exists once the extension is installed.
 
 After that I will ask before pushing. 8 local commits are waiting, including the cover margin fix and the screenshots.
+
+### Prompt 19
+
+````text
+Nice, and good call on not adding an index the query can't use.
+
+Yes, run the migration on production. If it applies cleanly and status shows nothing pending, go ahead and push too, then do the live checks and tell me the CI result. If anything looks off after the migration, stop and tell me before pushing.
+````
+
+### Reply 24
+
+The migration applied cleanly, so I pushed. CI passed and every live check passed. Phase 4 is live.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app (try the search box)
+
+## The migration
+
+```
+go run ./cmd/migrate -env .env.production
+  database: ep-restless-union-bhfufpzq (from .env.production)
+  applied 003_search.sql
+```
+Before pushing I checked the condition you set:
+- Status afterwards: "nothing to do, the schema is up to date".
+- `pg_trgm` 1.6 is installed and works there: "circut" scores 0.71 against the production names, the same as on `dev`.
+- Still 56 products, and 3 migrations recorded.
+- The live store kept answering during and after.
+
+Nothing looked off, so I went ahead.
+
+## CI
+
+Both jobs passed.
+- **Go API:** formatting, `go vet` and `govulncheck` passed. On the empty container all three migrations applied, including `003_search.sql`, so the extension is available in plain PostgreSQL as expected. The seed and the tests passed for all three packages.
+- **React app:** install, lint, unit tests and build passed.
+
+## Live checks
+
+**Every search from the list, against the live API: 24 of 24 as expected.**
+- Partial words: `thund`, `forge`, `circ`, `harb`, `kart` each found exactly their game or games.
+- Typos: `witchlite`, `circut`, `obsidain`, `starfal odyssey`, `emberwach`, `lanternwod`, `mythforge legnds`, `frostlin raly` all found the right game and nothing else.
+- Several words: `QUIET HARBOR` found Quiet Harbor, `kart xbox` found one product, `ashen steam` found nothing.
+- Nothing: `zzzzqq`, `%`, `thunder zzzz` found nothing.
+- Known limits: `vwo`, `krat`, `rouge`, `glbal`, `racing` found nothing, as documented.
+- `switch` found 10 products, all on Nintendo Switch. One letter (`a`) gives no suggestions.
+
+**The search box, in a browser on the live site**
+- Typing "thund" quickly sent exactly one request and showed two suggestions.
+- Arrow down twice then Enter opened the second suggestion.
+- Escape closed the list and kept the text.
+- "witchlite" then Enter: "Results for “witchlite”", 3 products, sorted by best match.
+- Ticking Xbox on the results page kept the search (1 product) and kept keyboard focus on the checkbox.
+- "zzzzqq": "No products match", with 6 best sellers below.
+- Phone width: the dropdown fits, no sideways scroll.
+- Zero policy violations and zero console errors.
+
+**Edge cache for suggestions:** first request MISS, the next two HIT.
+
+**Cover margin fix:** "MYTHFORGE" is now drawn at size 25 on the live site.
+
+**Security headers:** all four still sent.
+
+## One thing I noticed
+
+For "witchlite" the first result is the Steam GLOBAL edition, which is sold out. Inside a group of equally good matches the ranking goes by units sold and does not look at stock, so a sold-out edition can come first. It is correct by the rules I gave you, but a shopper would rather see what they can buy. A small change would put in-stock products ahead of sold-out ones within each group. I have not made it. Tell me if you want it.
+
+## Screenshots
+
+Three more are in `docs/screenshots/`: `search-dropdown.png`, `search-results.png` and `search-phone.png`. A copy of the phone one is at `C:\Users\User\Downloads\keybay-search-phone.png`. On the phone the long names are cut with an ellipsis in the dropdown, so the platform is not always visible there. The covers still tell them apart.
+
+## State
+
+- GitHub and the live site are at the same commit.
+- Committed locally and not pushed: the three new screenshots and this chat log entry.
+- Phases 1 to 4 are done. Next is phase 5, authentication: sign up, sign in, sign out, sessions in an httpOnly cookie stored in the database, protected routes, and tests. It needs migration `004_auth.sql` for the users and sessions tables.
+
+Tell me when to start phase 5, and whether you want the in-stock ranking change first.
