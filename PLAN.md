@@ -127,7 +127,7 @@ eneba-marketplace/
 users(id, email UNIQUE, password_hash, created_at)
 sessions(token_hash PK, user_id, expires_at)
 
-products(id, slug UNIQUE, name, description, platform, region, genre,
+products(id, slug UNIQUE, title, name, description, platform, region, genre,
          release_date, cover_color_a, cover_color_b, created_at)
 sellers(id, name, rating, sales_count)
 offers(id, product_id, seller_id, price_cents, UNIQUE(product_id, seller_id))
@@ -139,9 +139,10 @@ orders(id, user_id, status [pending|paid|failed|expired], total_cents,
 order_items(id, order_id, offer_id, product_name, seller_name,
             unit_price_cents, quantity)
 
-home_layout(position, block_type, title, enabled)
-banners(id, title, subtitle, cta_label, link, background, position, active)
-deals(id, offer_id, discount_percent, starts_at, ends_at)
+home_layout(position, block_type, title, see_all_url, enabled)
+banners(id, title, subtitle, cta_label, link, color_a, color_b, position, active)
+deals(id, offer_id UNIQUE, original_price_cents, starts_at, ends_at)
+product_sales(product_id PK, units_sold)
 ```
 
 Money is integer cents in EUR. `order_items` copies the product name, seller
@@ -186,7 +187,7 @@ change with no frontend deploy. An unknown type is skipped.
 | Block | Source | Go file |
 |---|---|---|
 | Banner | `banners` table | `home/banners.go` |
-| Best sellers | units sold, summed from `order_items` of paid orders (seeded history, then real purchases) | `home/bestsellers.go` |
+| Best sellers | `product_sales` table, units sold per product (seeded history; paid orders add to it from phase 6) | `home/bestsellers.go` |
 | Deals | `deals` table, only rows inside their time window, with an end time for a countdown | `home/deals.go` |
 | New releases | `products` by `release_date` | `home/newreleases.go` |
 | Platforms | product counts per platform | `home/platforms.go` |

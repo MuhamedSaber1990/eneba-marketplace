@@ -32,8 +32,23 @@ npm install
 npm run dev                 # site on http://localhost:5173
 ```
 
-The homepage shows a status panel. "Database: ok" means the frontend, the API
-and the database are connected. The catalog is at `/store`.
+The homepage is built from blocks the API sends. The catalog is at `/store`,
+and `/api/health` reports whether the API can reach the database.
+
+## About the data
+
+Everything in the shop is invented for this project and created by
+`cmd/seed`: the games, the sellers, the prices and the keys.
+
+Two things on the homepage look like facts and are not:
+
+- **Best sellers.** The "units sold" behind the ranking are random numbers
+  from the seed. Nothing was sold.
+- **Deals.** The seed picks eight offers, records their price as the "was"
+  price and lowers the real price by 15 to 40 percent. No price was ever
+  higher. Their end dates are real and spread over about 60 days from the day
+  the seed ran, so the block empties out over time. When a deal ends, its
+  price does not go back up by itself.
 
 ## Tests
 
@@ -44,18 +59,25 @@ go test ./...
 Tests that need a database use `DATABASE_URL` from `.env` and expect the seed
 data. Without a database they are skipped.
 
+```
+cd frontend && npm test
+```
+
+Frontend unit tests (Vitest) for small pieces of logic such as price
+formatting and the deals countdown.
+
 ## Checks
 
 Every push and pull request runs `.github/workflows/ci.yml` on GitHub:
 formatting, `go vet`, `govulncheck`, the migrations and seed on an empty
-database, the Go tests, then the frontend lint and build.
+database, the Go tests, then the frontend lint, tests and build.
 
 To run the same checks locally:
 
 ```
 gofmt -l . && go vet ./... && go test ./...
 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-cd frontend && npm run lint && npm run build
+cd frontend && npm run lint && npm test && npm run build
 ```
 
 To see the site with production's security headers (they are defined in
@@ -65,6 +87,9 @@ To see the site with production's security headers (they are defined in
 cd frontend && npm run build && npm run preview    # http://localhost:4173
 ```
 
+If port 8080 is taken, start the API on another port and tell the frontend:
+`PORT=8090 go run ./cmd/server`, then `API_URL=http://localhost:8090 npm run dev`.
+
 ## Layout
 
 ```
@@ -73,7 +98,7 @@ cmd/server/       entry point for local runs and for Render
 cmd/migrate/      applies the .sql files in migrations/
 cmd/seed/         fills the database with invented products
 migrations/       the database schema, one file per step
-backend/          the API: config, database pool, catalog queries, HTTP routes
+backend/          the API: config, database pool, catalog and homepage queries, HTTP routes
 frontend/         React app (Vite)
 docs/             chat log and design reference
 ```

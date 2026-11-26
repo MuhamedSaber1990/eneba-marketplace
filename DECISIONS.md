@@ -276,9 +276,15 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
     domain.
   - `script-src 'self'`: only our bundled script runs. Injected inline scripts
     do not, which is the main defense against cross-site scripting.
-  - `style-src 'self'`: only our stylesheet. This also blocks inline `style`
-    attributes, so the two that existed (in `PlaceholderPage`) moved to a CSS
-    class instead of the policy being loosened.
+  - `style-src 'self'`: only our stylesheet. It blocks `<style>` tags and
+    `style="..."` attributes written into the HTML. **Correction (phase 3):**
+    I first wrote that this also blocks React's `style={...}` prop and moved
+    two styles out of `PlaceholderPage` for that reason. That was wrong. React
+    applies the prop through the browser's style object, not by writing an
+    attribute, and the policy allows that. The banner block relies on it
+    (it passes two colors as CSS variables) and was tested under the policy
+    with no violations. The `PlaceholderPage` change was unnecessary, though
+    harmless, and stays.
   - `img-src 'self' data:`: covers come from `/api/products/.../cover.svg`.
   - `font-src 'self'`: Metropolis is bundled, so no font host is needed.
   - `connect-src 'self'`: the page may only call our own API.
@@ -313,3 +319,105 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **Why:** before a production run I want to see which database the command
   is pointed at and which files are pending. `-status` connects, prints both
   and exits. It does not even create the bookkeeping table.
+
+## 32. The homepage is assembled from a layout the backend sends
+
+- **Alternatives:** a fixed page in React; one endpoint returning the layout
+  and all block content together.
+- **Why:** `GET /api/home` returns the blocks in page order (type, title,
+  "see all" link, endpoint), read from the `home_layout` table. The frontend
+  holds one map from block type to component and nothing else about the page.
+  Reordering, renaming or hiding a block is an `UPDATE`, with no deploy. Each
+  block then fetches its own endpoint, so blocks load side by side and one
+  failing leaves the others standing. Unknown types are skipped on both
+  sides: the backend drops types it cannot serve, the frontend drops types it
+  cannot draw. This is the brief's "each block gets its content from its own
+  backend service or database, nothing is hardcoded".
+
+## 33. Best sellers reads its own table, `product_sales`
+
+- **Alternatives:** summing paid orders, as first planned.
+- **Why:** orders do not exist until the checkout phase, and the block should
+  not wait for it. `product_sales` holds units sold per product. It is seeded
+  with invented numbers; from the checkout phase on, paying for an order will
+  add to it in the same transaction. The block's query is a plain read either
+  way, and sold-out products are left out because a best seller nobody can
+  buy does not belong on the front page. **The seeded figures are made up.**
+
+## 34. A deal lowers the offer's real price
+
+- **Alternatives:** keeping the offer's price and applying the discount when
+  a price is shown.
+- **Why:** a deal row points at one offer and stores the price it had before
+  (`original_price_cents`) and when the deal ends. The offer's own
+  `price_cents` is the lowered price. So there is one price everywhere: store
+  card, product page, checkout. A discount applied at display time would have
+  to be repeated in every query that touches a price, and one missed place
+  would show a different number than the buyer pays.
+- **Limitation:** when a deal ends, the block stops showing it but nothing
+  raises the price again. That would need a scheduled job, which the free
+  tier and this project's size do not justify.
+- **The deals are invented**: no price was ever higher.
+
+## 35. Deals end on real dates, spread over 60 days
+
+- **Alternatives:** deals with no end; deals that all end the same week.
+- **Why:** a countdown needs a real end time, and a real end time means the
+  deal expires. The seed spreads eight deals from 5 to about 60 days out, so
+  the block is not empty when the project is reviewed. Once all have ended
+  the block has no items and the page leaves it out. `cmd/seed -reset`
+  creates fresh ones.
+
+## 36. A `title` column, so each game appears once in New releases
+
+- **Alternatives:** showing the newest product rows as they are.
+- **Why:** a product row is one edition (game, platform, region). The newest
+  rows are the same game two or three times. `products.title` holds the game
+  itself, and the block uses `DISTINCT ON (title)` to keep one edition per
+  game: the cheapest one that has stock. The migration fills the column for
+  existing rows from the name. The cover drawing now reads the title from the
+  column, where before it cut it out of the name.
+
+## 37. A static banner layout, with gradients and no images
+
+- **Alternatives:** an auto-rotating carousel; banner image files.
+- **Why:** a carousel that moves by itself changes while people read it and
+  needs pause controls to be accessible. One large panel and two small ones
+  show three promotions at once with no script. Banners are text on a
+  gradient whose two colors come from the `banners` table, so there are no
+  image assets to license, store or cache. A dark layer over the gradient
+  keeps white text readable whatever colors are stored.
+
+## 38. Homepage responses are cached at the edge for 60 seconds
+
+- **Alternatives:** no caching; caching in the browser.
+- **Why:** the homepage makes six API calls. `Cache-Control: public,
+  max-age=0, s-maxage=60` lets Vercel's edge keep each answer for a minute
+  and serve it without starting the function or waking the database.
+  `max-age=0` keeps browsers from holding their own copy. The cost: a change
+  to the homepage tables can take up to a minute to appear.
+
+## 39. A failed or empty block draws nothing
+
+- **Alternatives:** an error message inside the block.
+- **Why:** on a shop's front page a missing row is better than an error box.
+  If the layout itself fails to load, the page says so and links to the
+  store. The failed request is still visible in the browser's network tab.
+
+## 40. Vitest for frontend unit tests
+
+- **Alternatives:** no frontend tests yet; Jest.
+- **Why:** the countdown text ("3d 4h", "12m", ended) is logic with edges, and
+  it belongs in a test. Vitest uses the Vite setup the project already has,
+  so it needs no configuration. It is a development dependency only. CI runs
+  it in the frontend job.
+
+## 41. Covers shrink long titles instead of clipping them
+
+- **Alternatives:** a fixed font size (the first version).
+- **Why:** looking at a screenshot of the homepage showed titles such as
+  "WITCHLIGHT" cut off at the cover's edge. The font size is now the largest
+  one, up to 30, at which the longest line fits. The store page had the same
+  flaw since phase 2. Browsers keep a cover for a day, so a returning visitor
+  may see the old drawing until then.
+
