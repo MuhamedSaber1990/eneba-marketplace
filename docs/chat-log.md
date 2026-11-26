@@ -1451,3 +1451,58 @@ After the push I will:
 - watch the first CI run and tell you the result of each job. If the Postgres container step fails, I will fix it and tell you what was wrong.
 
 If the headers break anything on the live site, the fix is a one-line change to `vercel.json` and another push, and I will ask before that one too.
+
+### Prompt 12
+
+````text
+checked it is ok push it!
+````
+
+### Reply 17
+
+Pushed, deployed and checked. Phase 2, the security headers and CI are all live, and the first CI run passed.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app/store
+- **CI run:** https://github.com/MuhamedSaber1990/eneba-marketplace/actions
+
+## CI, first run on GitHub
+
+Both jobs passed on the first try, so the part I could not test locally works.
+
+**Go API job**
+- Formatting, `go vet` and `govulncheck` passed ("No vulnerabilities found").
+- The Postgres container started. On that empty database `migrate` applied `001_catalog.sql` and `seed` inserted 56 products, 8 sellers, 173 offers and 1,247 keys. Those are the same numbers as on Neon.
+- The tests passed, including the database tests, which ran for real and were not skipped.
+
+**React app job**
+- Install, lint and build passed.
+
+The whole run took under two minutes.
+
+## The live site
+
+**Phase 2**
+- `/api/products` returns 200. It was 404 before the push.
+- The store shows "56 products", 20 cards per page, and all 20 covers load.
+- Filtering by Xbox gives 18 products, "Next" goes to page 2 of 3, and a product page opens with its cover and offers.
+- The homepage status panel reads "API reachable, Database ok". That is the check I could not make in a browser back in phase 1, now done.
+
+**Security headers**
+- All four arrive on every kind of response I tried: the homepage, `/store`, the JSON API, a cover image and a 404. HSTS is still there too.
+- The cover image keeps its one-day cache header.
+- All four font weights load and the stylesheet applies.
+- The app caused zero policy violations, zero console errors and zero failed requests.
+- The policy is enforced on Vercel as well: an injected inline script, an inline style and an outside image were all blocked, and the script did not run.
+
+## What I did not check
+
+- I ran the browser test at desktop width only this time. The phone layout was checked locally before the headers were added, and the headers do not affect layout.
+- I still have not looked at the pages with my own eyes, only measured them. A quick look from you at the store and one product page is still worth it.
+
+## State
+
+- GitHub and the live site are at the same commit.
+- This reply is in the chat log as one new local commit, not pushed. A push redeploys the site, so I will include it with the next push you approve.
+- Phases 1 and 2 are done. Next is phase 3, the homepage: a layout endpoint and five blocks (banner, best sellers, deals, new releases, platforms), each with its own endpoint and data source. It needs migration `002_home.sql`, so the same order applies: `dev` first, your approval, production, then the push.
+
+Tell me when to start phase 3. I will read the plan's homepage section again and tell you what I intend before building.
