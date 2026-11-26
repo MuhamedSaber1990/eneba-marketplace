@@ -6,7 +6,16 @@ import { defineConfig } from 'vite'
 // Forwarding /api to it means the frontend uses the same relative URLs
 // locally and on Vercel, where both live on one domain. Set API_URL to
 // point at an API on another port, for example when 8080 is taken.
-const apiProxy = { '/api': process.env.API_URL ?? 'http://localhost:8080' }
+//
+// changeOrigin is false so the API receives the same Host header the browser
+// sent (localhost:5173). The API compares that with the request's Origin to
+// refuse requests forged by other sites, and on Vercel the two match because
+// frontend and API share a domain. Vite's short form ('/api': 'http://...')
+// would rewrite the Host to the API's own address and every sign-in would be
+// refused as cross-site.
+const apiProxy = {
+  '/api': { target: process.env.API_URL ?? 'http://localhost:8080', changeOrigin: false },
+}
 
 // The security headers are defined once, in vercel.json, because Vercel is
 // what sends them in production. They are read here so that `npm run preview`

@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { getFilters } from '../api/catalog'
 import { useAsync } from '../lib/useAsync'
+import { useAuth } from '../state/auth'
 import { SearchBox } from './SearchBox'
 import './Header.css'
 
@@ -10,6 +11,8 @@ export function Header() {
   // is cleared after opening a product and refilled on a new search.
   const location = useLocation()
   const searchedText = location.pathname === '/search' ? (new URLSearchParams(location.search).get('q') ?? '') : ''
+
+  const auth = useAuth()
 
   // The category bar lists the platforms that exist in the catalog. If the
   // request fails, the bar still shows "All products".
@@ -28,8 +31,19 @@ export function Header() {
           <SearchBox key={`${location.pathname}?${searchedText}`} initialText={searchedText} />
 
           <nav className="header__account" aria-label="Account">
-            <Link to="/signin">Log in</Link>
-            <Link to="/signup">Register</Link>
+            {/* While "who am I" is still loading, neither set of links is
+                shown, so they do not flip from one to the other. */}
+            {!auth.loading && auth.user && (
+              <Link to="/account" className="header__user" title={auth.user.email}>
+                {auth.user.email}
+              </Link>
+            )}
+            {!auth.loading && !auth.user && (
+              <>
+                <Link to="/signin">Log in</Link>
+                <Link to="/signup">Register</Link>
+              </>
+            )}
             <Link to="/cart" className="header__cart" aria-label="Cart">
               <CartIcon />
             </Link>
