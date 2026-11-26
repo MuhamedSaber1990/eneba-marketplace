@@ -2972,3 +2972,141 @@ Tell me whether to build the restock. If yes, I would do it before phase 7, as i
 - GitHub and the live site are at the same commit.
 - Committed locally and not pushed: the three screenshots and this chat log entry.
 - Phases 1 to 6 are done. Phase 7 is Stripe in test mode, then phase 8 is the styling pass, the README and the walkthrough.
+
+### Prompt 26
+
+````text
+Yes, build the automatic restock like you described, behind the setting, with a test, and the honest line in the README. Keep it out of the tests that depend on exact stock.
+
+After that give me the phase 7 plan. Tell me exactly what you need from me for Stripe (account, which keys, where they go) so I can get it ready, and what happens to the simulated payment buttons once Stripe is in.
+````
+
+### Reply 31
+
+The restock is built, tested and committed locally. It is not live yet: it needs a push and one setting on Vercel, and I am asking for both below. The phase 7 plan follows, and nothing of phase 7 is built.
+
+## The automatic restock
+
+**What it does:** when a sale leaves an offer with fewer than 3 available keys, the same transaction adds 5 newly generated ones.
+
+**Where it lives**
+- `backend/checkout/restock.go`: about 90 lines with comments. The top-up itself, and a key generator that uses the system's secure random source and the same alphabet as the seed.
+- One `if` in `Pay`, right after an order is marked paid.
+- A switch, `Store.RestockSold`, set from the environment variable `DEMO_RESTOCK`. It is off unless that variable is `1`.
+
+**Kept out of the exact-stock tests:** the switch is off by default, and every existing test builds its store without touching it. The restock tests switch it on themselves.
+
+**Its own tests, all passing**
+- 4 keys, 2 bought: 2 are left, which is below 3, so the offer ends with 7. The buyer received 2 of the original keys, not new ones.
+- Paying the same order again does not restock a second time.
+- 10 keys, 2 bought: 8 left, nothing added.
+- A declined payment and an expired order add nothing, and an offer that was sold out from the start stays sold out.
+- With the switch off, an offer bought empty stays empty.
+- The generator: 200 codes, all shaped XXXXX-XXXXX-XXXXX, none repeated.
+
+The full Go suite passes and `govulncheck` is clean.
+
+**Written down:** the README line you asked for is in the "Buying something" section, and `DECISIONS.md` has entry 67 with the alternatives I rejected.
+
+**To make it live I need your ok for two things:**
+1. Set `DEMO_RESTOCK=1` for Production in the Vercel project. It is not a secret.
+2. Push. Four local commits are waiting: the screenshots, the last chat log entry, the restock, and this entry.
+
+No migration is involved.
+
+## Phase 7: Stripe in test mode
+
+**Skills read:** the Stripe skill's payment and security references, and Stripe's own documentation for the two facts the design hangs on (below).
+
+### The flow
+
+1. On the order page, the buyer clicks "Pay with card".
+2. Our server asks Stripe for a Checkout Session for that order: the order's lines and prices, and the order id attached to it.
+3. The browser goes to Stripe's hosted payment page. No card data touches our site.
+4. The buyer pays with a test card. Stripe sends them back to our order page.
+5. Separately, Stripe calls our webhook. The webhook checks the signature, finds the order by the id attached to the session, and calls the same `Pay` function the simulated buttons call today. That marks the keys sold.
+6. The order page, which has been showing "Confirming your payment", sees the order turn `paid` and shows the keys.
+
+Step 5 is the one that fulfils the order. The page the buyer lands on fulfils nothing, because a buyer can pay and then lose their connection before it loads.
+
+### What I need from you
+
+**1. A Stripe account.** Free. Test payments work without verifying a business or adding a bank account.
+
+**2. A test API key.** In the Stripe dashboard, in test mode or a sandbox, under Developers → API keys. Either of these works:
+- A **restricted key** (starts with `rk_test_`), which is what Stripe recommends. Create one with write access to "Checkout Sessions" and "Refunds" and nothing else.
+- The standard **secret key** (starts with `sk_test_`). Simpler to find, more powerful than needed.
+
+**3. A webhook endpoint.** In the dashboard under Developers → Webhooks, add an endpoint:
+- URL: `https://eneba-marketplace-nine.vercel.app/api/stripe/webhook`
+- Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`
+- Stripe then shows a **signing secret** (starts with `whsec_`).
+
+You can create the endpoint before the code is deployed. Stripe will simply get errors from that address until it is.
+
+**Where the two secrets go.** Not into the chat and not into the repository. The same way as the database string:
+- Put them in a git-ignored file `~/eneba-marketplace/.env.stripe`, as two lines:
+  ```
+  STRIPE_SECRET_KEY=rk_test_...
+  STRIPE_WEBHOOK_SECRET=whsec_...
+  ```
+- I pipe each into Vercel as a Production variable, marked sensitive, without printing it, and then delete the file.
+- If you would rather do it yourself: `vercel env add STRIPE_SECRET_KEY production --sensitive`, and the same for the other.
+
+**What I set myself, since they are not secrets:** `PAYMENT_MODE=stripe` and `APP_URL=https://eneba-marketplace-nine.vercel.app` on Vercel.
+
+**Optional, for testing on this PC:** the Stripe CLI can forward webhooks to `localhost`. Without it I test the webhook with signed test events in Go and do the end-to-end check on the live site. I do not need it.
+
+### What happens to the simulated buttons
+
+They stay in the code and leave the live site.
+
+- **A setting decides:** `PAYMENT_MODE` is `simulated` or `stripe`. The default is `simulated`.
+- **On the live site (`stripe`):** the order page shows one button, "Pay with card (Stripe test mode)", and a note with the test card number `4242 4242 4242 4242`. The two simulated buttons are not shown.
+- **The simulated endpoint is switched off on the server in that mode,** not only hidden. If it stayed reachable, anyone could mark an order paid with one request and skip Stripe.
+- **Locally and in CI (`simulated`):** everything works as today, with no Stripe account. That is what keeps the tests running anywhere, and it is the fallback if Stripe gives trouble before your interview: one variable switches the live site back.
+- **A declined card** is tested on Stripe's page with `4000 0000 0000 0002`. Stripe shows the decline there and lets the buyer try another card.
+
+### Two facts from Stripe's documentation that shape the design
+
+**1. A Stripe payment page cannot be made to expire sooner than 30 minutes after it is created.** Our reservation is 15 minutes. If I left it, a buyer could pay on Stripe's page after our keys had been released.
+- **What I will do:** in Stripe mode the reservation becomes 35 minutes and the Stripe page expires at 30. The 5 minutes in between are for the webhook to arrive. Simulated mode keeps 15.
+- This changes decision 1 of phase 6 for the live site, so I am flagging it and not just doing it.
+
+**2. Webhooks can be late or repeated.**
+- Repeated is already handled: `Pay` does nothing on an order that is paid.
+- Late is the case I flagged in phase 6: money taken for an order that has expired. With the 5-minute margin it should not happen, but "should not" is not good enough for money. If it does, the webhook refunds the payment through Stripe and the order page says so. That is why the key needs "Refunds" access.
+
+### Other decisions I am making for you
+
+1. **Hosted Checkout,** as you chose in the interview. Least code, and Stripe handles the card form.
+2. **One open payment page per order.** If the buyer comes back and clicks pay again, they get the same Stripe page while it is still open. Otherwise two pages could both be paid for one order.
+3. **Stripe chooses which payment methods to show.** Its guidance is not to hard-code "card only". Some methods confirm later, which is why two of the four events are the "async" ones.
+4. **The webhook has no Origin check and no cookie.** It is called by Stripe's servers, not a browser. Its protection is the signature: without the signing secret nobody can produce a request it accepts.
+5. **Stripe's Go library, `stripe-go`,** as the one new dependency. It creates sessions and verifies signatures. Writing signature verification by hand is the kind of thing that goes wrong quietly.
+6. **A small migration, `006_payments.sql`:** a column for the refund reference. The Stripe session id goes in the existing `payment_ref`.
+7. **Prices are sent to Stripe from our order,** as recorded when it was placed. Nothing is set up in Stripe's product catalog.
+
+### Tests
+
+- **Webhook, without a Stripe account:** events signed in the test with a test secret. A valid `checkout.session.completed` pays the order. The same event twice pays it once. A wrong signature is refused. An unpaid session does not fulfil. An expired session releases the keys. A payment for an expired order triggers the refund path.
+- **Session creation:** behind a small interface, with a fake in the tests, since the real call needs Stripe.
+- **Modes:** in `stripe` mode the simulated endpoint answers 404. In `simulated` mode the Stripe routes do.
+- **On the live site:** a real test-card payment through Stripe's page, keys delivered by the webhook. Then a declined test card. I will try to drive Stripe's page from the headless browser. If Stripe blocks automation, I will ask you to make that one payment and I will check the result in the database and the logs.
+
+### Not in this phase
+
+Saved cards, subscriptions, tax, invoices, Apple Pay or Google Pay setup, refunds started by the buyer, live mode.
+
+### Order of work
+
+1. You prepare the account, the key and the webhook endpoint. This can happen while I build.
+2. I build in simulated mode plus the Stripe code, with the tests above.
+3. Summary and SQL for your review. Production migration with your approval.
+4. Secrets into Vercel, the mode switched to `stripe`, push, then the live payment test.
+
+## What I need from you now
+
+1. Ok to set `DEMO_RESTOCK=1` on Vercel and push the restock.
+2. Ok on the phase 7 plan, in particular the 35-minute reservation in Stripe mode and the automatic refund for a late payment.
+3. Tell me when `.env.stripe` exists, or that you added the two variables yourself.
