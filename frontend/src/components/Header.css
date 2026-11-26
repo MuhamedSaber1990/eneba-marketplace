@@ -22,46 +22,6 @@
   background: var(--color-primary);
 }
 
-/* The search box: transparent with a thin white border, like the reference. */
-.header__search {
-  flex: 1;
-  max-width: 550px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: var(--header-row);
-  padding: 0 var(--space-2) 0 var(--space-3);
-  border: var(--border-thin);
-}
-
-.header__search:focus-within {
-  border-color: var(--color-primary);
-}
-
-.header__search svg {
-  flex-shrink: 0;
-}
-
-.header__search input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  font-size: var(--text-search);
-  font-weight: var(--font-heavy);
-}
-
-.header__search input::placeholder {
-  color: var(--color-text-soft);
-}
-
-/* The form shows the focus state, so the input's own ring is not needed. */
-.header__search input:focus-visible {
-  outline: none;
-}
-
 .header__account {
   display: flex;
   align-items: center;
@@ -108,17 +68,6 @@
 
   .header__account {
     margin-left: auto;
-  }
-
-  .header__search {
-    order: 3;
-    flex-basis: 100%;
-    max-width: none;
-    height: var(--touch-target);
-  }
-
-  .header__search input {
-    font-size: var(--text-base);
   }
 
   /* The category bar scrolls sideways inside itself, the page does not. */

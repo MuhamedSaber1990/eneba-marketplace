@@ -59,3 +59,9 @@ export function getProduct(slug: string, signal?: AbortSignal) {
 export function getFilters(signal?: AbortSignal) {
   return apiGet<Filters>('/api/filters', signal)
 }
+
+/** The best few matches for what was typed, for the search box dropdown. */
+export async function suggestProducts(text: string, signal?: AbortSignal): Promise<ProductSummary[]> {
+  const body = await apiGet<{ items: ProductSummary[] }>(`/api/search/suggest?q=${encodeURIComponent(text)}`, signal)
+  return body.items
+}

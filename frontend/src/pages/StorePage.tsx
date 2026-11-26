@@ -2,9 +2,14 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { type Filters, getFilters, listProducts } from '../api/catalog'
 import { Pagination } from '../components/Pagination'
+import { ProductRowBlock } from '../blocks/ProductRowBlock'
 import { ProductCard, ProductCardSkeleton } from '../components/ProductCard'
 import { useAsync } from '../lib/useAsync'
+import '../blocks/blocks.css'
 import './StorePage.css'
+
+// "Best match" only makes sense when there is a search text to match.
+const RELEVANCE_OPTION = { value: 'relevance', label: 'Best match' }
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest first' },
@@ -13,15 +18,27 @@ const SORT_OPTIONS = [
   { value: 'name', label: 'Name: A to Z' },
 ]
 
+// Shown under "no results", so a failed search is not a dead end. It is the
+// homepage's best sellers block, pointed at the same endpoint.
+const BEST_SELLERS_BLOCK = {
+  type: 'best_sellers',
+  title: 'Best sellers',
+  see_all_url: '/store',
+  endpoint: '/api/home/best-sellers',
+}
+
 /**
- * The catalog. Every filter, the sort order and the page number live in the
+ * The catalog, and also the search results page: `mode="search"` is the same
+ * listing with a heading that says what was searched. Every filter, the sort order and the page number live in the
  * URL (/store?platform=Steam&sort=price_asc&page=2), not in component state.
  * That makes a filtered view shareable, keeps the browser's back button
  * working, and means there is one source of truth: the address bar.
  */
-export function StorePage() {
+export function StorePage({ mode = 'store' }: { mode?: 'store' | 'search' }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryString = searchParams.toString()
+  const searchText = searchParams.get('q')?.trim() ?? ''
+  const isSearch = mode === 'search' && searchText !== ''
 
   // Products reload whenever the URL's query string changes.
   const products = useAsync((signal) => listProducts(queryString, signal), queryString)
@@ -32,8 +49,12 @@ export function StorePage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
-    document.title = 'Store | Keybay'
-  }, [])
+    document.title = isSearch ? `${searchText} | Search | Keybay` : 'Store | Keybay'
+  }, [isSearch, searchText])
+
+  // With a search text the API orders by best match unless told otherwise.
+  const sortOptions = searchText !== '' ? [RELEVANCE_OPTION, ...SORT_OPTIONS] : SORT_OPTIONS
+  const currentSort = searchParams.get('sort') ?? (searchText !== '' ? 'relevance' : 'newest')
 
   /** Applies a change to the URL parameters and goes back to page 1. */
   function updateParams(change: (params: URLSearchParams) => void) {
@@ -50,14 +71,17 @@ export function StorePage() {
     window.scrollTo({ top: 0 })
   }
 
+  // On the results page the search text is the subject of the page, not one
+  // of its filters, so it is not counted and "Clear all filters" keeps it.
+  const textFilters = isSearch ? ['min_price', 'max_price'] : ['q', 'min_price', 'max_price']
   const activeFilterCount =
     searchParams.getAll('platform').length +
     searchParams.getAll('region').length +
-    ['q', 'min_price', 'max_price'].filter((name) => searchParams.has(name)).length
+    textFilters.filter((name) => searchParams.has(name)).length
 
   return (
     <div className="container store">
-      <h1 className="section-heading">Store</h1>
+      <h1 className="section-heading">{isSearch ? `Results for “${searchText}”` : 'Store'}</h1>
 
       <div className="store__layout">
         <aside className={filtersOpen ? 'store__filters store__filters--open' : 'store__filters'}>
@@ -70,16 +94,19 @@ export function StorePage() {
           </button>
 
           <div className="store__filters-body">
-            {/* The key remounts the panel when the URL changes from outside
-                (back button, header link), so the text inputs show the new values. */}
+            {/* The panel's text inputs keep their own state while typing. The
+                key rebuilds the panel when one of those values changes in the
+                URL from outside (back button, a new search), so the inputs
+                show the new value. Ticking a checkbox does not change the
+                key, so the panel stays and keyboard focus is not lost. */}
             <FilterPanel
-              key={queryString}
+              key={['q', 'min_price', 'max_price'].map((name) => searchParams.get(name) ?? '').join('|')}
               filters={filters.status === 'ready' ? filters.data : null}
               searchParams={searchParams}
               updateParams={updateParams}
             />
             {activeFilterCount > 0 && (
-              <button className="store__clear" onClick={() => setSearchParams(sortOnly(searchParams))}>
+              <button className="store__clear" onClick={() => setSearchParams(withoutFilters(searchParams, isSearch))}>
                 Clear all filters
               </button>
             )}
@@ -95,10 +122,10 @@ export function StorePage() {
             <label className="store__sort">
               Sort by
               <select
-                value={searchParams.get('sort') ?? 'newest'}
+                value={currentSort}
                 onChange={(event) => updateParams((params) => params.set('sort', event.target.value))}
               >
-                {SORT_OPTIONS.map((option) => (
+                {sortOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -122,9 +149,23 @@ export function StorePage() {
           )}
 
           {products.status === 'ready' && products.data.items.length === 0 && (
-            <div className="panel">
-              <p>No products match these filters.</p>
-            </div>
+            <>
+              <div className="panel">
+                {isSearch ? (
+                  <>
+                    <p>No products match “{searchText}”.</p>
+                    <p className="store__hint">Check the spelling, try fewer words, or remove a filter.</p>
+                  </>
+                ) : (
+                  <p>No products match these filters.</p>
+                )}
+              </div>
+              {isSearch && (
+                <div className="store__fallback">
+                  <ProductRowBlock block={BEST_SELLERS_BLOCK} />
+                </div>
+              )}
+            </>
           )}
 
           {products.status === 'ready' && products.data.items.length > 0 && (
@@ -143,11 +184,17 @@ export function StorePage() {
   )
 }
 
-/** Keeps the chosen sort order when all filters are cleared. */
-function sortOnly(searchParams: URLSearchParams): URLSearchParams {
+/**
+ * The URL parameters with every filter removed. The sort order stays, and on
+ * the results page so does the search text.
+ */
+function withoutFilters(searchParams: URLSearchParams, keepSearchText: boolean): URLSearchParams {
   const next = new URLSearchParams()
-  const sort = searchParams.get('sort')
-  if (sort) next.set('sort', sort)
+  const keep = keepSearchText ? ['q', 'sort'] : ['sort']
+  for (const name of keep) {
+    const value = searchParams.get(name)
+    if (value) next.set(name, value)
+  }
   return next
 }
 

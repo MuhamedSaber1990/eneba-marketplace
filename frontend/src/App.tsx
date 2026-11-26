@@ -29,7 +29,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/store" element={<StorePage />} />
         <Route path="/product/:slug" element={<ProductPage />} />
-        <Route path="/search" element={<PlaceholderPage title="Search" note="Search arrives in phase 4." />} />
+        <Route path="/search" element={<StorePage mode="search" />} />
         <Route path="/signin" element={<PlaceholderPage title="Log in" note="Accounts arrive in phase 5." />} />
         <Route path="/signup" element={<PlaceholderPage title="Register" note="Accounts arrive in phase 5." />} />
         <Route path="/cart" element={<PlaceholderPage title="Cart" note="The cart arrives in phase 6." />} />

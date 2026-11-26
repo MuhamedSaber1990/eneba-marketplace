@@ -1,25 +1,20 @@
-import { type FormEvent, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { getFilters } from '../api/catalog'
 import { useAsync } from '../lib/useAsync'
+import { SearchBox } from './SearchBox'
 import './Header.css'
 
 export function Header() {
-  const [query, setQuery] = useState('')
-  const navigate = useNavigate()
+  // On the results page the box shows what was searched. The key makes React
+  // build a fresh box when the page or the searched text changes, so the box
+  // is cleared after opening a product and refilled on a new search.
+  const location = useLocation()
+  const searchedText = location.pathname === '/search' ? (new URLSearchParams(location.search).get('q') ?? '') : ''
 
   // The category bar lists the platforms that exist in the catalog. If the
   // request fails, the bar still shows "All products".
   const filters = useAsync(getFilters, 'filters')
   const platforms = filters.status === 'ready' ? filters.data.platforms : []
-
-  function handleSearch(event: FormEvent) {
-    event.preventDefault()
-    const trimmed = query.trim()
-    if (trimmed) {
-      navigate(`/search?q=${encodeURIComponent(trimmed)}`)
-    }
-  }
 
   return (
     <header className="header">
@@ -30,20 +25,7 @@ export function Header() {
             keybay
           </Link>
 
-          <form className="header__search" role="search" onSubmit={handleSearch}>
-            <label htmlFor="header-search" className="visually-hidden">
-              Search products
-            </label>
-            <SearchIcon />
-            <input
-              id="header-search"
-              type="search"
-              placeholder="Search for games and more"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              autoComplete="off"
-            />
-          </form>
+          <SearchBox key={`${location.pathname}?${searchedText}`} initialText={searchedText} />
 
           <nav className="header__account" aria-label="Account">
             <Link to="/signin">Log in</Link>
@@ -64,15 +46,6 @@ export function Header() {
         </nav>
       </div>
     </header>
-  )
-}
-
-function SearchIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-4-4" />
-    </svg>
   )
 }
 

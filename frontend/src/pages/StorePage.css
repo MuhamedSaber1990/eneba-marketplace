@@ -131,6 +131,22 @@
   color: var(--color-text);
 }
 
+.store__hint {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* The best sellers row under "no results". The row is built for six cards
+   across the full page; here it sits in the narrower results column. */
+.store__fallback {
+  margin-top: var(--space-4);
+}
+
+.store__fallback .product-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 /* Four cards per row at full width, fewer as the window narrows. */
 .product-grid {
   display: grid;

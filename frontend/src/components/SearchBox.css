@@ -1,0 +1,129 @@
+/* The search box: transparent with a thin white border, like the reference.
+   It is the positioning parent of the suggestions panel. */
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 550px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--header-row);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: var(--border-thin);
+}
+
+.search-box:focus-within {
+  border-color: var(--color-primary);
+}
+
+.search-box > svg {
+  flex-shrink: 0;
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  font-size: var(--text-search);
+  font-weight: var(--font-heavy);
+}
+
+.search-box input::placeholder {
+  color: var(--color-text-soft);
+}
+
+/* The box itself shows the focus state, so the input's own ring is not needed. */
+.search-box input:focus-visible {
+  outline: none;
+}
+
+/* The suggestions, hanging under the box and above the page content. */
+.search-box__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: -1px;
+  right: -1px;
+  z-index: 20;
+  background: var(--color-panel);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.search-box__panel ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search-box__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.search-box__option:hover,
+.search-box__option--active {
+  background: var(--color-panel-raised);
+}
+
+.search-box__option img {
+  flex-shrink: 0;
+  width: 36px;
+  height: 48px;
+}
+
+.search-box__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-box__price {
+  font-size: var(--text-sm);
+  font-weight: var(--font-heavy);
+  white-space: nowrap;
+}
+
+.search-box__empty {
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.search-box__all {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-top: 1px solid var(--color-panel-raised);
+  background: none;
+  color: var(--color-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-box__all:hover {
+  background: var(--color-panel-raised);
+}
+
+@media (max-width: 768px) {
+  .search-box {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+    height: var(--touch-target);
+  }
+
+  .search-box input {
+    font-size: var(--text-base);
+  }
+}

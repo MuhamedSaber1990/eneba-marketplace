@@ -97,6 +97,7 @@ func TestSearch(t *testing.T) {
 		{"limit", "vwo", []string{}},    // typo in a three-letter word (vow)
 		{"limit", "krat", []string{}},   // two letters swapped in a four-letter word (kart)
 		{"limit", "rouge", []string{}},  // swapped letters in a five-letter word (rogue)
+		{"limit", "glbal", []string{}},  // scores 0.44 against "GLOBAL", just under the threshold
 		{"limit", "racing", []string{}}, // a genre, not part of any name
 	}
 
