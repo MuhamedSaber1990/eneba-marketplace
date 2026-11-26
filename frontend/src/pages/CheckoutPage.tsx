@@ -122,7 +122,7 @@ export function CheckoutPage() {
               </p>
             )}
             <p className="checkout__note">
-              Placing the order holds your keys for 15 minutes while you pay. No real money is taken on this site.
+              Placing the order holds your keys while you pay. No real money is taken on this site.
             </p>
           </aside>
         </div>

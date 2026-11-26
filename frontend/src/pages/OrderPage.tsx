@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { getOrder, type Order, type OrderStatus, payOrder } from '../api/checkout'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { getOrder, type Order, type OrderStatus, payOrder, startCheckout } from '../api/checkout'
 import { ApiError } from '../api/client'
 import { clockLeft } from '../lib/countdown'
 import { formatDateTime } from '../lib/dates'
@@ -38,6 +38,9 @@ function loaded(order: Order): Load {
 export function OrderPage() {
   const { id = '' } = useParams()
   const cart = useCart()
+  // Stripe sends the buyer back here with ?checkout=done after paying.
+  const [searchParams] = useSearchParams()
+  const returnedFromPayment = searchParams.get('checkout') === 'done'
 
   const [load, setLoad] = useState<Load>({ status: 'loading' })
   const [paying, setPaying] = useState(false)
@@ -65,6 +68,32 @@ export function OrderPage() {
     document.title = 'Your order | Keybay'
   }, [])
 
+  // Back from the payment page, the order is usually still "pending" for a
+  // moment: the payment is confirmed by a message from Stripe to our server
+  // (the webhook), which travels separately from the buyer. So the page asks
+  // again every two seconds until the order has left "pending", and gives up
+  // after a minute.
+  const [checksLeft, setChecksLeft] = useState(30)
+  const confirming = returnedFromPayment && order?.status === 'pending' && checksLeft > 0
+  useEffect(() => {
+    if (!confirming) return
+    const timer = setTimeout(() => {
+      getOrder(id)
+        .then((fresh) => setLoad(loaded(fresh)))
+        .catch(() => {}) // a failed check is simply tried again
+        .finally(() => setChecksLeft((n) => n - 1))
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [confirming, id, checksLeft])
+
+  // Paid: the cart has done its job, whichever way the payment was made.
+  const isPaid = order?.status === 'paid'
+  useEffect(() => {
+    if (isPaid) cart.clear()
+    // Only when the order becomes paid, not whenever the cart object changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPaid])
+
   // A clock that ticks once a second while the order is pending.
   const [now, setNow] = useState(() => new Date())
   const isPending = order?.status === 'pending'
@@ -86,9 +115,6 @@ export function OrderPage() {
     try {
       const updated = await payOrder(order.id, outcome)
       setLoad(loaded(updated))
-      if (updated.status === 'paid') {
-        cart.clear() // bought: the cart has done its job
-      }
     } catch (caught) {
       // "Not payable" comes with the order's final state. Show that state.
       const body = caught instanceof ApiError ? caught.body : null
@@ -99,6 +125,24 @@ export function OrderPage() {
       }
     } finally {
       setPaying(false)
+    }
+  }
+
+  /** Stripe mode: get the address of the payment page and go there. */
+  async function goToPayment() {
+    if (!order) return
+    setPaying(true)
+    setMessage(null)
+    try {
+      // Leaving this site for Stripe's page. The button stays disabled.
+      window.location.assign(await startCheckout(order.id))
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : 'The payment page could not be opened. Try again.')
+      setPaying(false)
+      // The order may have expired in the meantime: show its current state.
+      getOrder(order.id)
+        .then((fresh) => setLoad(loaded(fresh)))
+        .catch(() => {})
     }
   }
 
@@ -138,23 +182,56 @@ export function OrderPage() {
         </p>
       )}
 
-      {shownStatus === 'pending' && (
+      {shownStatus === 'pending' && confirming && (
+        <section className="panel order__payment" aria-live="polite">
+          <h2>Confirming your payment</h2>
+          <p className="checkout__note">
+            Stripe is telling us about your payment. This usually takes a few seconds, and the page updates by itself.
+          </p>
+        </section>
+      )}
+
+      {shownStatus === 'pending' && !confirming && (
         <section className="panel order__payment" aria-live="polite">
           <h2>Payment</h2>
           <p>
             Your keys are held for <strong className="order__clock">{timeLeft}</strong> more minutes.
           </p>
-          <p className="checkout__note">
-            This is a test payment. No card is asked for and no money is taken. Choose how the payment should turn out.
-          </p>
-          <div className="order__buttons">
-            <button className="button" disabled={paying} onClick={() => pay('approve')}>
-              {paying ? 'One moment…' : `Pay ${formatPrice(order.total_cents)} (test)`}
-            </button>
-            <button className="button button--secondary" disabled={paying} onClick={() => pay('decline')}>
-              Simulate a declined card
-            </button>
-          </div>
+
+          {returnedFromPayment && (
+            <p className="checkout__warning" role="alert">
+              We have not heard from Stripe about a payment yet. If you paid, reload this page in a moment.
+            </p>
+          )}
+
+          {order.payment_mode === 'stripe' ? (
+            <>
+              <p className="checkout__note">
+                You pay on Stripe's page, in test mode: no real money is taken. Use the test card{' '}
+                <strong>4242 4242 4242 4242</strong> with any future date and any three digits.
+              </p>
+              <div className="order__buttons">
+                <button className="button" disabled={paying} onClick={goToPayment}>
+                  {paying ? 'Opening Stripe…' : `Pay ${formatPrice(order.total_cents)} with card`}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="checkout__note">
+                This is a test payment. No card is asked for and no money is taken. Choose how the payment should turn
+                out.
+              </p>
+              <div className="order__buttons">
+                <button className="button" disabled={paying} onClick={() => pay('approve')}>
+                  {paying ? 'One moment…' : `Pay ${formatPrice(order.total_cents)} (test)`}
+                </button>
+                <button className="button button--secondary" disabled={paying} onClick={() => pay('decline')}>
+                  Simulate a declined card
+                </button>
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -171,7 +248,14 @@ export function OrderPage() {
       {shownStatus === 'expired' && (
         <section className="panel order__payment">
           <h2>This order ran out of time</h2>
-          <p className="checkout__note">It was not paid within 15 minutes, so the keys were released. Your cart is still filled.</p>
+          {order.refunded ? (
+            <p className="checkout__note">
+              Your payment arrived after the order had expired, so it was refunded in full and no keys were delivered.
+              Your cart is still filled.
+            </p>
+          ) : (
+            <p className="checkout__note">It was not paid in time, so the keys were released. Your cart is still filled.</p>
+          )}
           <Link to="/cart" className="button">
             Back to the cart
           </Link>

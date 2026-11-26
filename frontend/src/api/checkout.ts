@@ -45,6 +45,10 @@ export type Order = {
   /** Time left on a pending order's reservation, by the server's clock. */
   seconds_left: number
   paid_at: string | null
+  /** A payment arrived too late to be fulfilled and was sent back. */
+  refunded: boolean
+  /** Which payment step the order page shows. */
+  payment_mode: 'simulated' | 'stripe'
   items: OrderItem[]
 }
 
@@ -85,6 +89,15 @@ export async function createOrder(lines: CartLine[], expectedTotalCents: number)
 export async function payOrder(orderId: string, outcome: 'approve' | 'decline'): Promise<Order> {
   const body = await apiPost<{ order: Order }>(`/api/orders/${encodeURIComponent(orderId)}/pay`, { outcome })
   return body.order
+}
+
+/**
+ * Asks for the address of the payment provider's page for this order. The
+ * browser is then sent there. Used when payment_mode is "stripe".
+ */
+export async function startCheckout(orderId: string): Promise<string> {
+  const body = await apiPost<{ url: string }>(`/api/orders/${encodeURIComponent(orderId)}/checkout`, {})
+  return body.url
 }
 
 export async function getOrder(orderId: string, signal?: AbortSignal): Promise<Order> {
