@@ -104,6 +104,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm test
+
       # The build runs the TypeScript compiler first, so type errors fail here.
       - name: Type-check and build
         run: npm run build
