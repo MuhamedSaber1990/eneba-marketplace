@@ -1,0 +1,345 @@
+/* Cart, checkout, order page and order history. */
+
+.checkout {
+  padding-top: var(--space-3);
+}
+
+.checkout .panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.checkout__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--gap);
+  align-items: start;
+}
+
+.checkout__note {
+  font-size: var(--text-sm);
+  color: var(--color-text-soft);
+}
+
+.checkout__summary h2,
+.order__payment h2 {
+  font-size: 1.125rem;
+  font-weight: var(--font-bold);
+}
+
+.checkout__total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  font-weight: var(--font-semibold);
+}
+
+.checkout__total strong {
+  font-size: var(--text-title);
+  font-weight: var(--font-heavy);
+}
+
+.checkout__action {
+  width: 100%;
+  min-height: var(--touch-target);
+}
+
+/* A bar on the left as well as the color, so a warning does not depend on
+   color alone. */
+.checkout__warning {
+  width: 100%;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-input);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.checkout__summary .checkout__warning {
+  margin-bottom: 0;
+}
+
+.checkout__warning a,
+.order__links a {
+  color: var(--color-primary);
+}
+
+.checkout__warning a:hover,
+.order__links a:hover {
+  text-decoration: underline;
+}
+
+/* ---- Cart lines ---- */
+
+.cart-lines,
+.order__items,
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cart-line {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) auto 90px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-panel);
+}
+
+.cart-line__info,
+.order-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cart-line__name {
+  font-weight: var(--font-bold);
+  overflow-wrap: anywhere;
+}
+
+.cart-line__name:hover {
+  color: var(--color-primary);
+}
+
+.cart-line__seller,
+.cart-line__unit {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.cart-line__problem {
+  font-size: var(--text-sm);
+  font-weight: var(--font-heavy);
+  color: var(--color-primary);
+}
+
+.cart-line__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cart-line__controls select {
+  height: 40px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: var(--color-input);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.cart-line__controls option {
+  background: var(--color-panel);
+  color: var(--color-text);
+}
+
+.cart-line__remove {
+  min-height: 40px;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.cart-line__remove:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.cart-line__quantity {
+  color: var(--color-text-muted);
+  font-weight: var(--font-semibold);
+}
+
+.cart-line__total {
+  text-align: right;
+  font-size: var(--text-price);
+  font-weight: var(--font-heavy);
+}
+
+/* ---- Order page ---- */
+
+.order__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-soft);
+}
+
+/* The status is always written out. The colored bar only supports the word. */
+.order__status {
+  padding: 4px 10px;
+  border-left: 4px solid var(--color-text-muted);
+  background: var(--color-panel);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: var(--font-heavy);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.order__status--paid {
+  border-left-color: var(--color-mint);
+}
+
+.order__status--pending {
+  border-left-color: var(--color-primary);
+}
+
+.order__payment {
+  max-width: 640px;
+  margin-bottom: var(--space-3);
+}
+
+/* Digits of equal width, so the clock does not wobble as it counts. */
+.order__clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+}
+
+.order__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.order__buttons .button {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+}
+
+.order-item {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  background: var(--color-panel);
+}
+
+.order-item__keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.key-row code {
+  padding: 8px 12px;
+  background: var(--color-input);
+  border-left: 4px solid var(--color-mint);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--text-base);
+  letter-spacing: 0.05em;
+  overflow-wrap: anywhere;
+  user-select: all; /* one click selects the whole key */
+}
+
+.order__links {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* ---- Order history ---- */
+
+.order-list__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 90px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--color-panel);
+  transition: background-color 150ms ease;
+}
+
+.order-list__row:hover {
+  background: var(--color-panel-raised);
+}
+
+.order-list__what {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.order-list__keys {
+  margin-left: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.order-list__date {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.order-list__total {
+  text-align: right;
+  font-weight: var(--font-heavy);
+}
+
+@media (max-width: 900px) {
+  .checkout__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  /* Cover and name on the first row; controls and total on the second. */
+  .cart-line {
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+
+  .cart-line__controls {
+    grid-column: 2;
+  }
+
+  .cart-line__total {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .order-list__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+
+  .order-list__total {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  .key-row {
+    flex-wrap: wrap;
+  }
+}

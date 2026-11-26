@@ -36,6 +36,25 @@
   padding: 0 var(--space-2);
 }
 
+/* The number of keys in the cart, on the corner of the icon. */
+.header__account .header__cart {
+  position: relative;
+}
+
+.header__cart-count {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  min-width: 18px;
+  padding: 2px 4px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 0.6875rem;
+  font-weight: var(--font-heavy);
+  line-height: 1.2;
+  text-align: center;
+}
+
 /* A long email is cut with an ellipsis so it cannot push the cart off screen. */
 .header__account .header__user {
   display: block;

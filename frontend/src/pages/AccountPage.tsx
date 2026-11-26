@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../state/auth'
 import './AuthPage.css'
 
@@ -33,7 +33,10 @@ export function AccountPage() {
       <div className="panel">
         <span className="account__label">Signed in as</span>
         <span className="account__email">{user?.email}</span>
-        <p className="account__note">Your orders and keys will be listed here once checkout is built.</p>
+        <p className="account__note">The keys you bought are kept with your orders.</p>
+        <Link to="/orders" className="button">
+          Your orders
+        </Link>
         <button className="button button--secondary" onClick={handleSignOut} disabled={signingOut}>
           {signingOut ? 'Logging out…' : 'Log out'}
         </button>

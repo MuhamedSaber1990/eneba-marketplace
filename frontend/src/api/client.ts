@@ -1,13 +1,26 @@
 // One place for talking to the backend. Every API file builds on apiGet, so
 // error handling is written once.
 
-/** An error response from the API, with its HTTP status. */
+/** An error response from the API, with its HTTP status and its body. */
 export class ApiError extends Error {
   status: number
+  /**
+   * The parsed response body. Some errors carry more than a message: a
+   * "code" the page can act on ("price_changed", "out_of_stock"), or the
+   * order's final state.
+   */
+  body: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body: unknown = null) {
     super(message)
     this.status = status
+    this.body = body
+  }
+
+  /** The machine-readable reason, if the API sent one. */
+  get code(): string | null {
+    const body = this.body
+    return body !== null && typeof body === 'object' && 'code' in body ? String(body.code) : null
   }
 }
 
@@ -22,7 +35,7 @@ async function readResponse<T>(response: Response): Promise<T> {
       body !== null && typeof body === 'object' && 'error' in body
         ? String(body.error)
         : `Request failed with status ${response.status}`
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, body)
   }
   return body as T
 }

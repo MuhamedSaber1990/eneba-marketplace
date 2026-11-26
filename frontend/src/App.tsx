@@ -4,11 +4,16 @@ import { Header } from './components/Header'
 import { RequireAuth } from './components/RequireAuth'
 import { AccountPage } from './pages/AccountPage'
 import { AuthPage } from './pages/AuthPage'
+import { CartPage } from './pages/CartPage'
+import { CheckoutPage } from './pages/CheckoutPage'
 import { HomePage } from './pages/HomePage'
+import { OrderPage } from './pages/OrderPage'
+import { OrdersPage } from './pages/OrdersPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import { ProductPage } from './pages/ProductPage'
 import { StorePage } from './pages/StorePage'
 import { AuthProvider } from './state/AuthProvider'
+import { CartProvider } from './state/CartProvider'
 
 /** Header and footer around whichever page matches the URL (the Outlet). */
 function Layout() {
@@ -28,29 +33,55 @@ function Layout() {
 
 export default function App() {
   return (
-    // AuthProvider is outside the routes, so every page and the header can
-    // ask who is signed in.
+    // Both providers are outside the routes, so every page and the header
+    // can ask who is signed in and what is in the cart.
     <AuthProvider>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/store" element={<StorePage />} />
-          <Route path="/product/:slug" element={<ProductPage />} />
-          <Route path="/search" element={<StorePage mode="search" />} />
-          <Route path="/signin" element={<AuthPage mode="signin" />} />
-          <Route path="/signup" element={<AuthPage mode="signup" />} />
-          <Route
-            path="/account"
-            element={
-              <RequireAuth>
-                <AccountPage />
-              </RequireAuth>
-            }
-          />
-          <Route path="/cart" element={<PlaceholderPage title="Cart" note="The cart arrives in phase 6." />} />
-          <Route path="*" element={<PlaceholderPage title="Page not found" note="There is nothing at this address." />} />
-        </Route>
-      </Routes>
+      <CartProvider>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/store" element={<StorePage />} />
+            <Route path="/product/:slug" element={<ProductPage />} />
+            <Route path="/search" element={<StorePage mode="search" />} />
+            <Route path="/signin" element={<AuthPage mode="signin" />} />
+            <Route path="/signup" element={<AuthPage mode="signup" />} />
+            <Route
+              path="/account"
+              element={
+                <RequireAuth>
+                  <AccountPage />
+                </RequireAuth>
+              }
+            />
+            <Route path="/cart" element={<CartPage />} />
+            <Route
+              path="/checkout"
+              element={
+                <RequireAuth>
+                  <CheckoutPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/orders"
+              element={
+                <RequireAuth>
+                  <OrdersPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/orders/:id"
+              element={
+                <RequireAuth>
+                  <OrderPage />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<PlaceholderPage title="Page not found" note="There is nothing at this address." />} />
+          </Route>
+        </Routes>
+      </CartProvider>
     </AuthProvider>
   )
 }

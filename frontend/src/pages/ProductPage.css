@@ -147,6 +147,15 @@
   font-weight: var(--font-heavy);
 }
 
+.offers .offers__action {
+  width: 1%; /* as narrow as its button */
+  text-align: right;
+}
+
+.offers__action .button {
+  min-width: 110px;
+}
+
 .offers__badge {
   display: inline-block;
   margin-left: var(--space-2);
@@ -185,19 +194,82 @@
   }
 }
 
+/* "Rating" is in the column heading on wide screens. On phones the heading
+   row is hidden, so the word appears next to the number. */
+.offers__label {
+  display: none;
+}
+
 @media (max-width: 600px) {
+  /* A five-column table does not fit a phone. Each offer becomes a card:
+     seller on top, rating and stock under it, then price and button. The
+     markup stays a table, so a screen reader still reads it as one. */
+  .offers thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .offers,
+  .offers tbody {
+    display: block;
+  }
+
+  .offers tbody tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'seller seller'
+      'rating stock'
+      'price action';
+    gap: var(--space-1) var(--space-3);
+    align-items: center;
+    margin-bottom: var(--space-1);
+    padding: var(--space-3);
+  }
+
+  .offers th,
+  .offers td {
+    padding: 0;
+    white-space: normal;
+  }
+
+  .offers__seller {
+    grid-area: seller;
+  }
+
+  .offers__rating {
+    grid-area: rating;
+  }
+
+  .offers__stock {
+    grid-area: stock;
+    text-align: right;
+  }
+
+  .offers td.offers__price {
+    grid-area: price;
+    text-align: left;
+  }
+
+  .offers .offers__action {
+    grid-area: action;
+    width: auto;
+  }
+
   .offers__optional {
     display: none;
   }
 
-  /* Let seller names and stock wrap, so the price column stays on screen. */
-  .offers th,
-  .offers td {
-    padding: var(--space-2);
-    white-space: normal;
+  .offers__label {
+    display: inline;
+    color: var(--color-text-muted);
   }
 
-  .offers td.offers__price {
-    white-space: nowrap;
+  .offers__action .button {
+    min-height: var(--touch-target);
+    padding: 0 var(--space-3);
   }
 }

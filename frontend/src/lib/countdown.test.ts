@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { timeLeft } from './countdown'
+import { clockLeft, timeLeft } from './countdown'
 
 const now = new Date('2026-12-01T12:00:00Z')
 const after = (ms: number) => new Date(now.getTime() + ms)
@@ -27,5 +27,22 @@ describe('timeLeft', () => {
 
   it('is null for a date that could not be read', () => {
     expect(timeLeft(new Date('not a date'), now)).toBeNull()
+  })
+})
+
+describe('clockLeft', () => {
+  it.each([
+    ['a full reservation', 15 * MINUTE, '15:00'],
+    ['minutes and seconds', 14 * MINUTE + 32_000, '14:32'],
+    ['seconds are padded', 7_000, '0:07'],
+    ['part of a second counts as a whole one', 6_200, '0:07'],
+    ['the last second', 1, '0:01'],
+  ])('%s', (_name, ms, expected) => {
+    expect(clockLeft(after(ms), now)).toBe(expected)
+  })
+
+  it('is null once the time has passed', () => {
+    expect(clockLeft(now, now)).toBeNull()
+    expect(clockLeft(after(-5000), now)).toBeNull()
   })
 })

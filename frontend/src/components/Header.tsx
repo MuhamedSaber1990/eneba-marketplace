@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { getFilters } from '../api/catalog'
 import { useAsync } from '../lib/useAsync'
 import { useAuth } from '../state/auth'
+import { useCart } from '../state/cart'
 import { SearchBox } from './SearchBox'
 import './Header.css'
 
@@ -13,6 +14,7 @@ export function Header() {
   const searchedText = location.pathname === '/search' ? (new URLSearchParams(location.search).get('q') ?? '') : ''
 
   const auth = useAuth()
+  const cart = useCart()
 
   // The category bar lists the platforms that exist in the catalog. If the
   // request fails, the bar still shows "All products".
@@ -44,8 +46,17 @@ export function Header() {
                 <Link to="/signup">Register</Link>
               </>
             )}
-            <Link to="/cart" className="header__cart" aria-label="Cart">
+            <Link
+              to="/cart"
+              className="header__cart"
+              aria-label={cart.count === 0 ? 'Cart, empty' : `Cart, ${cart.count} ${cart.count === 1 ? 'item' : 'items'}`}
+            >
               <CartIcon />
+              {cart.count > 0 && (
+                <span className="header__cart-count" aria-hidden="true">
+                  {cart.count}
+                </span>
+              )}
             </Link>
           </nav>
         </div>

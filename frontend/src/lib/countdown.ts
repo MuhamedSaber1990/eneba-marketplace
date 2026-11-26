@@ -19,3 +19,18 @@ export function timeLeft(endsAt: Date, now: Date): string | null {
   if (minutes > 0) return `${minutes}m`
   return 'less than a minute'
 }
+
+/**
+ * The time left as a clock, minutes and seconds: "14:32", "0:07". Returns
+ * null when the time has passed. Used for an order's reservation, which is
+ * minutes long and worth watching by the second.
+ */
+export function clockLeft(endsAt: Date, now: Date): string | null {
+  const ms = endsAt.getTime() - now.getTime()
+  if (Number.isNaN(ms) || ms <= 0) return null
+
+  const totalSeconds = Math.ceil(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}

@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getProduct, type Offer, type ProductDetail } from '../api/catalog'
+import { MAX_QUANTITY, quantityInCart } from '../lib/cart'
 import { formatPrice } from '../lib/money'
 import { useAsync } from '../lib/useAsync'
+import { useCart } from '../state/cart'
 import './ProductPage.css'
 
 /** One product: its details and every seller's offer, for comparing. */
@@ -110,6 +112,9 @@ function ProductView({ product }: { product: ProductDetail }) {
                 <th scope="col" className="offers__price">
                   Price
                 </th>
+                <th scope="col">
+                  <span className="visually-hidden">Add to cart</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -132,17 +137,33 @@ function ProductView({ product }: { product: ProductDetail }) {
 }
 
 function OfferRow({ offer, isBest }: { offer: Offer; isBest: boolean }) {
+  const cart = useCart()
   const soldOut = offer.stock === 0
+  const inCart = quantityInCart(cart.lines, offer.id)
+  // No more can be added once the cart holds the per-order limit, or as many
+  // as the seller has.
+  const atLimit = inCart >= Math.min(MAX_QUANTITY, offer.stock)
   return (
     <tr className={soldOut ? 'offers__row--sold-out' : undefined}>
-      <th scope="row">
+      <th scope="row" className="offers__seller">
         {offer.seller_name}
         {isBest && <span className="offers__badge">Best price</span>}
       </th>
-      <td>{offer.seller_rating.toFixed(1)} / 5</td>
+      <td className="offers__rating">
+        <span className="offers__label">Rating </span>
+        {offer.seller_rating.toFixed(1)} / 5
+      </td>
       <td className="offers__optional">{offer.seller_sales_count.toLocaleString('en')}</td>
-      <td>{soldOut ? 'Sold out' : `${offer.stock} in stock`}</td>
+      <td className="offers__stock">{soldOut ? 'Sold out' : `${offer.stock} in stock`}</td>
       <td className="offers__price">{formatPrice(offer.price_cents)}</td>
+      <td className="offers__action">
+        {!soldOut && (
+          <button className="button" disabled={atLimit} onClick={() => cart.add(offer.id)}>
+            {inCart > 0 ? `In cart (${inCart})` : 'Add to cart'}
+            <span className="visually-hidden"> from {offer.seller_name}</span>
+          </button>
+        )}
+      </td>
     </tr>
   )
 }
