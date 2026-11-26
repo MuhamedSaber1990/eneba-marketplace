@@ -50,6 +50,34 @@ Two things on the homepage look like facts and are not:
   the seed ran, so the block empties out over time. When a deal ends, its
   price does not go back up by itself.
 
+## Accounts
+
+Sign up with any email and a password of at least 8 characters. Nothing is
+sent to the address, so it does not have to be a real one.
+
+A demo account also exists:
+
+| Email | Password |
+|---|---|
+| `demo@keybay.test` | `keybay-demo-2026` |
+
+These credentials are public on purpose. If the demo account misbehaves for
+any reason, create your own account instead: it takes ten seconds.
+
+How it is protected (the reasons are in DECISIONS.md, entries 49 to 56):
+
+- Passwords are stored as bcrypt hashes.
+- The session is a random token in an `HttpOnly`, `Secure`, `SameSite=Lax`
+  cookie. The database holds only a hash of it. Sessions last 7 days and
+  signing out ends them on the server.
+- Requests that change something must come from the site itself and be JSON.
+- Failed sign-ins are limited per email and per IP address.
+- A failed sign-in does not say whether the email exists.
+
+What is not built: email verification, password reset, changing a password,
+deleting an account, two-factor login. Signing up with an email that is
+already registered says so, which does reveal that the account exists.
+
 ## Search
 
 The search box in the header works from every page. It tolerates typos and
@@ -101,6 +129,9 @@ To see the site with production's security headers (they are defined in
 cd frontend && npm run build && npm run preview    # http://localhost:4173
 ```
 
+Signing in on plain `http://localhost` needs `INSECURE_COOKIES=1` in `.env`
+(it is in `.env.example`). Without it the session cookie requires HTTPS.
+
 If port 8080 is taken, start the API on another port and tell the frontend:
 `PORT=8090 go run ./cmd/server`, then `API_URL=http://localhost:8090 npm run dev`.
 
@@ -112,7 +143,7 @@ cmd/server/       entry point for local runs and for Render
 cmd/migrate/      applies the .sql files in migrations/
 cmd/seed/         fills the database with invented products
 migrations/       the database schema, one file per step
-backend/          the API: config, database pool, catalog and homepage queries, HTTP routes
+backend/          the API: config, database pool, catalog, homepage and account logic, HTTP routes
 frontend/         React app (Vite)
 docs/             chat log and design reference
 ```

@@ -124,8 +124,9 @@ eneba-marketplace/
 ## Data model
 
 ```
-users(id, email UNIQUE, password_hash, created_at)
-sessions(token_hash PK, user_id, expires_at)
+users(id, email UNIQUE, password_hash, is_demo, created_at)
+sessions(token_hash PK, user_id, created_at, expires_at)
+auth_attempts(id, kind, key, attempted_at)
 
 products(id, slug UNIQUE, title, name, description, platform, region, genre,
          release_date, cover_color_a, cover_color_b, created_at)

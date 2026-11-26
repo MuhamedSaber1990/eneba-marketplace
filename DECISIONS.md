@@ -545,3 +545,135 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   rebuild when the URL changes from outside. Checkboxes read the URL directly
   and need none.
 
+## 49. Passwords: bcrypt at cost 12, length rules only
+
+- **Alternatives:** argon2id; scrypt; a plain or salted SHA hash (never).
+- **Why bcrypt:** it is slow on purpose and salts every hash by itself, so a
+  stolen `users` table cannot be guessed through quickly and two users with
+  the same password do not get the same hash. argon2id is the newer first
+  recommendation, but it needs memory settings tuned to the host, and a
+  serverless function's memory is small. bcrypt has one number to explain.
+- **Rules:** at least 8 characters, at most 72 bytes. bcrypt reads only the
+  first 72 bytes, so a longer password is refused: cutting it silently would
+  mean two different passwords open the same account. No "must contain a
+  symbol" rule, because length is what makes a password hard to guess.
+- **Never exposed:** the `User` type the rest of the program passes around
+  has no hash field, so the hash cannot leak into a response by accident.
+- **Shortcut:** no check against lists of leaked passwords.
+
+## 50. The session cookie and what is stored for it
+
+- **The cookie:** `__Host-session`, with `HttpOnly` (JavaScript cannot read
+  it), `Secure` (HTTPS only), `SameSite=Lax` (not attached to other sites'
+  background requests), `Path=/`, no `Domain`, 7 days. The `__Host-` prefix
+  makes the browser itself refuse the cookie unless it is Secure, host-only
+  and site-wide.
+- **The token:** 32 bytes from the system's secure random source. Nothing is
+  encoded in it.
+- **In the database:** only the SHA-256 hash of the token. A fast hash is
+  right here, unlike for passwords, because 32 random bytes cannot be
+  guessed however fast the hash is. A copy of the `sessions` table does not
+  let anyone sign in.
+- **Alternatives rejected:** a JWT in `localStorage` (readable by any script
+  on the page) and a self-contained JWT cookie (cannot be revoked before it
+  expires, so "sign out" would not really end anything).
+- **Local development:** plain `http://localhost` cannot use `Secure` or the
+  prefix. `INSECURE_COOKIES=1` in `.env` switches both off. The default is
+  the secure form, and the variable is not set on Vercel.
+
+## 51. CSRF: three layers and no token
+
+- **The attack:** another site makes the visitor's browser send a request
+  here, with their cookie attached.
+- **Layer 1:** `SameSite=Lax` keeps the cookie off other sites' POSTs.
+- **Layer 2:** every route that changes something is wrapped in `sameOrigin`,
+  which refuses a request whose `Origin` header is missing or names another
+  host. Browsers set that header themselves and a page cannot fake it.
+- **Layer 3:** those routes accept only `application/json`. A plain HTML form
+  cannot send that, and a script can only try after a preflight request that
+  this server never approves.
+- **No GET changes anything.** Sign out is a POST.
+- **Why no CSRF token:** with one domain for frontend and API and the three
+  layers above, a token would add state to keep in sync and stop nothing
+  more.
+- **A consequence for local development:** the dev proxy must pass the
+  browser's `Host` header through unchanged (`changeOrigin: false` in
+  `vite.config.ts`). Vite's short proxy form rewrites it, and then every
+  sign-in is refused as cross-site. The browser test found this.
+
+## 52. Sessions end on the server
+
+- **Expiry:** `expires_at` is 7 days after sign in, and it is checked in the
+  query on every request. An expired session stops working even if the
+  browser still sends its cookie.
+- **Sign out:** deletes the session row and clears the cookie. A copied token
+  is dead from that moment.
+- **A new token at every sign in,** so a token planted beforehand is useless.
+- **Cleanup:** a user's expired rows are deleted when they sign in. No
+  scheduled job.
+- **`Cache-Control: no-store`** on every response about an account.
+- **Shortcuts:** no "sign out everywhere", no list of active sessions, and
+  the 7 days neither extend with use nor shorten when idle.
+
+## 53. Sign-in attempts are counted in the database
+
+- **Why the database:** serverless function instances share no memory.
+- **Limits:** 5 failed sign-ins per email in 15 minutes; 30 failed sign-ins
+  per IP address in 15 minutes; 10 sign-ups per IP address per hour. Over a
+  limit the answer is 429.
+- **Limits apply to any email, registered or not,** so being limited does not
+  reveal whether an account exists.
+- **A successful sign-in does not reset the count,** so an attacker cannot
+  clear it with an account of their own.
+- **The IP address** is the first entry of `X-Forwarded-For`. Vercel
+  overwrites that header and does not pass on what a visitor sent, so it
+  cannot be forged there (Vercel's documentation says so; I did not test it
+  myself). On a host that passes the header through, `clientIP` would need
+  changing.
+- **Gaps:** anyone who knows an email can lock its sign-in for 15 minutes by
+  failing 5 times. No CAPTCHA, no growing delays. Old rows are deleted when a
+  later attempt is recorded, not on a schedule.
+
+## 54. The demo account is not locked per email
+
+- **The problem:** the demo account's password is printed in the README. With
+  the per-email limit, anyone could lock it for 15 minutes by failing 5
+  times, and a reviewer could run into that.
+- **What was built:** `users.is_demo` marks the account, and sign-in skips the
+  per-email limit for it. The per-IP limit still applies.
+- **Why that is safe:** the limit exists to stop password guessing, and this
+  password is public. Locking the account protects nothing.
+- **Also:** the README tells reviewers they can create their own account
+  with any email, which does not depend on the demo account at all.
+
+## 55. Sign-in does not reveal who has an account; sign-up does
+
+- **Sign-in:** an unknown email and a wrong password get the same status and
+  the same message. They also do the same work: for an unknown email the
+  password is still compared against a fixed dummy bcrypt hash, so the
+  response time does not give it away. The dummy hash is a constant in the
+  code and not computed at startup, which would slow every cold start.
+- **Sign-up:** an email that already has an account is answered with "an
+  account with that email already exists". That does reveal it.
+- **Why the shortcut:** the proper pattern answers "check your inbox" either
+  way and lets an email tell the owner. This project sends no email.
+  Pretending success would leave a real person unable to understand why they
+  cannot sign in. The per-IP sign-up limit keeps this from being used to
+  test a long list of addresses quickly.
+- **Uniqueness is enforced by the database,** not by a `SELECT` first. Two
+  sign-ups for the same address at the same instant cannot both succeed.
+
+## 56. The frontend asks who is signed in; it never holds the session
+
+- **How:** `AuthProvider` calls `GET /api/auth/me` when the page loads and
+  keeps the answer. The cookie is invisible to JavaScript, so there is no
+  token in React state or `localStorage` to steal.
+- **`RequireAuth` is a convenience, not the protection.** It sends a
+  signed-out visitor to the sign-in page. The data behind a protected page is
+  refused by the backend's `requireUser` without a valid session, so
+  bypassing the component in the browser gains nothing.
+- **Returning after sign-in:** the wanted address travels in `?next=`. It is
+  accepted only if it is a path on this site (`safeNextPath`, with tests), so
+  a crafted link cannot bounce someone to another site right after they
+  typed their password.
+
