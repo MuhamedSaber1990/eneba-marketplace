@@ -44,6 +44,27 @@ go test ./...
 Tests that need a database use `DATABASE_URL` from `.env` and expect the seed
 data. Without a database they are skipped.
 
+## Checks
+
+Every push and pull request runs `.github/workflows/ci.yml` on GitHub:
+formatting, `go vet`, `govulncheck`, the migrations and seed on an empty
+database, the Go tests, then the frontend lint and build.
+
+To run the same checks locally:
+
+```
+gofmt -l . && go vet ./... && go test ./...
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+cd frontend && npm run lint && npm run build
+```
+
+To see the site with production's security headers (they are defined in
+`vercel.json`), build it and use preview mode instead of the dev server:
+
+```
+cd frontend && npm run build && npm run preview    # http://localhost:4173
+```
+
 ## Layout
 
 ```

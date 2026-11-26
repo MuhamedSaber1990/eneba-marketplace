@@ -237,3 +237,79 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   product", "prices never go down", "no product on two pages") by comparing
   the query's answer with the same filter applied in Go. They skip themselves
   when `DATABASE_URL` is not set.
+
+## 28. CI on GitHub Actions, as a signal and not a gate
+
+- **Alternatives:** no CI; CI that also performs the deploy.
+- **What it does:** `.github/workflows/ci.yml` runs on every push and pull
+  request. The Go job checks formatting (`gofmt`), runs `go vet`, runs
+  `govulncheck` (known vulnerabilities in dependencies that our code can
+  reach), then migrates and seeds an empty database and runs the tests. The
+  frontend job runs `npm ci`, the linter and the build, which type-checks.
+- **The database in CI:** a throwaway `postgres:18` container that exists only
+  for the job (18 is what Neon runs). It needs no secret, it does not depend
+  on Neon being awake, and it proves on every push that the migrations and the
+  seed work from nothing. The alternative, a GitHub secret holding the Neon
+  `dev` string, would put a database password into GitHub. What the container
+  does not cover is Neon's pooler; that path is covered by local test runs,
+  which use the pooled string.
+- **What it does not do:** it does not stop a deploy. Vercel builds every push
+  to `main` by itself and does not wait for GitHub Actions, so a failing run
+  shows a red mark on the commit while the site still goes out. For one
+  developer who reads the result, that is enough.
+- **What a real gate would take:** turn off Vercel's automatic Git deploys,
+  store a Vercel token and the project ids as GitHub secrets, and add a deploy
+  job that runs `vercel deploy --prod` only after both check jobs pass. About
+  15 more lines, and a long-lived token to look after. Worth it on a team.
+- **Small choices:** the workflow has read-only access to the repository, a
+  newer push cancels the older run, and the Go version is read from `go.mod`.
+  Actions are pinned to a major version (`@v7`). Pinning to a commit hash is
+  stricter and is what I would do for a repository with secrets.
+
+## 29. Security headers, with a strict Content-Security-Policy
+
+- **Alternatives:** no headers (the state before); a looser policy with
+  `'unsafe-inline'`.
+- **Where:** a `headers` block in `vercel.json`, applied to every path.
+- **The policy, line by line:**
+  - `default-src 'self'`: anything not named below may only come from our own
+    domain.
+  - `script-src 'self'`: only our bundled script runs. Injected inline scripts
+    do not, which is the main defense against cross-site scripting.
+  - `style-src 'self'`: only our stylesheet. This also blocks inline `style`
+    attributes, so the two that existed (in `PlaceholderPage`) moved to a CSS
+    class instead of the policy being loosened.
+  - `img-src 'self' data:`: covers come from `/api/products/.../cover.svg`.
+  - `font-src 'self'`: Metropolis is bundled, so no font host is needed.
+  - `connect-src 'self'`: the page may only call our own API.
+  - `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`: close three
+    less common ways of injecting or redirecting content.
+  - `frame-ancestors 'none'`: no site may show ours in a frame.
+- **The other three:** `X-Content-Type-Options: nosniff` (the browser trusts
+  the declared file type), `X-Frame-Options: DENY` (the older form of
+  `frame-ancestors`, kept for old browsers) and
+  `Referrer-Policy: strict-origin-when-cross-origin` (other sites learn our
+  domain but not which page a visitor came from).
+- **Testing it before deploy:** the headers exist only on Vercel, so
+  `vite.config.ts` reads them from `vercel.json` and sends them in
+  `npm run preview`. One copy of the headers, and a local way to see what the
+  policy blocks.
+- **Later:** Stripe's hosted Checkout is a full-page redirect and needs no
+  change. An embedded Stripe form would need Stripe's domains added.
+
+## 30. Time limits on the local server
+
+- **Alternatives:** `http.ListenAndServe`, which has none.
+- **Why:** without limits, a client that sends its request one byte at a time
+  can hold a connection open forever (a "slowloris" attack). `cmd/server` now
+  builds an `http.Server` with `ReadHeaderTimeout` 5s, `ReadTimeout` 10s,
+  `WriteTimeout` 30s and `IdleTimeout` 60s. This matters for local runs and
+  for Render. On Vercel the platform enforces its own limits and this file is
+  not used.
+
+## 31. `migrate -status` shows what would run without changing anything
+
+- **Alternatives:** trusting the env file name.
+- **Why:** before a production run I want to see which database the command
+  is pointed at and which files are pending. `-status` connects, prints both
+  and exits. It does not even create the bookkeeping table.
