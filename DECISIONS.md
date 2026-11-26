@@ -343,6 +343,13 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   add to it in the same transaction. The block's query is a plain read either
   way, and sold-out products are left out because a best seller nobody can
   buy does not belong on the front page. **The seeded figures are made up.**
+- **One card per game (changed before release).** The first version ranked
+  product rows, and since a product is one edition, the row showed "Quiet
+  Harbor" twice (two regions of the Xbox edition). Now the query keeps one
+  edition per title, the one that sold the most among those in stock, and
+  ranks those. It is the same `DISTINCT ON (title)` approach as New releases
+  (entry 36), with a different rule for which edition wins: most sold here,
+  cheapest there.
 
 ## 34. A deal lowers the offer's real price
 

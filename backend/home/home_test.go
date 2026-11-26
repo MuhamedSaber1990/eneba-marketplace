@@ -109,6 +109,13 @@ func TestDeals(t *testing.T) {
 	}
 }
 
+// titleOf returns the game's title from a product name: the part before its
+// platform. "Quiet Harbor Xbox Key GLOBAL" on Xbox gives "Quiet Harbor".
+func titleOf(p catalog.ProductSummary) string {
+	title, _, _ := strings.Cut(p.Name, " "+p.Platform+" Key ")
+	return title
+}
+
 func TestBestSellers(t *testing.T) {
 	store, _ := testStores(t)
 	items, err := store.BestSellers(context.Background())
@@ -118,12 +125,50 @@ func TestBestSellers(t *testing.T) {
 	if len(items) == 0 || len(items) > productRowSize {
 		t.Fatalf("got %d best sellers, want 1 to %d", len(items), productRowSize)
 	}
+
+	seenTitles := map[string]bool{}
 	for i, item := range items {
 		if item.FromPriceCents == nil {
 			t.Errorf("%s is sold out but listed as a best seller", item.Slug)
 		}
 		if i > 0 && item.UnitsSold > items[i-1].UnitsSold {
 			t.Errorf("%s sold %d, more than the one ranked above it (%d)", item.Slug, item.UnitsSold, items[i-1].UnitsSold)
+		}
+		// Each game once, even when two of its editions both sold well.
+		title := titleOf(item.ProductSummary)
+		if seenTitles[title] {
+			t.Errorf("%q appears more than once", title)
+		}
+		seenTitles[title] = true
+	}
+}
+
+// The edition shown for a game must be the one that sold the most. This reads
+// the sales table directly and compares.
+func TestBestSellersPicksTheBestSellingEdition(t *testing.T) {
+	store, _ := testStores(t)
+	ctx := context.Background()
+
+	items, err := store.BestSellers(ctx)
+	if err != nil {
+		t.Fatalf("BestSellers: %v", err)
+	}
+	for _, item := range items {
+		// The highest sales figure among this game's editions that have stock.
+		var best int
+		err := store.db.QueryRow(ctx, `
+			SELECT MAX(sales.units_sold)
+			  FROM products p
+			  JOIN product_sales sales ON sales.product_id = p.id
+			 WHERE p.title = (SELECT title FROM products WHERE slug = $1)
+			   AND EXISTS (SELECT 1 FROM offers o JOIN keys k ON k.offer_id = o.id
+			                WHERE o.product_id = p.id AND k.status = 'available')`,
+			item.Slug).Scan(&best)
+		if err != nil {
+			t.Fatalf("reading sales for %s: %v", item.Slug, err)
+		}
+		if item.UnitsSold != best {
+			t.Errorf("%s is shown with %d units sold, but another edition of the game sold %d", item.Slug, item.UnitsSold, best)
 		}
 	}
 }
@@ -140,11 +185,10 @@ func TestNewReleases(t *testing.T) {
 		t.Fatalf("got %d new releases, want 1 to %d", len(items), productRowSize)
 	}
 
-	// Each game once: no two cards may share a cover title. The title is the
-	// product name up to its platform.
+	// Each game once: no two cards may share a title.
 	seenTitles := map[string]bool{}
 	for i, item := range items {
-		title, _, _ := strings.Cut(item.Name, " "+item.Platform+" Key ")
+		title := titleOf(item)
 		if seenTitles[title] {
 			t.Errorf("%q appears more than once", title)
 		}
