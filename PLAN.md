@@ -155,11 +155,10 @@ plus the foreign keys used in listings.
 | Method and path | Auth | Purpose |
 |---|---|---|
 | GET `/api/health` | | checks the database connection |
-| GET `/api/products` | | store listing: `q, platform, region, min_price, max_price, sort, page` |
+| GET `/api/products` | | store listing and search results: `q, platform, region, min_price, max_price, sort, page` (see DECISIONS.md 42) |
 | GET `/api/products/{slug}` | | product details and its offers |
 | GET `/api/filters` | | available platforms, regions, price range |
 | GET `/api/products/{slug}/cover.svg` | | the generated cover image |
-| GET `/api/search?q=` | | ranked results (same filters as the store) |
 | GET `/api/search/suggest?q=` | | top 6 for the header dropdown |
 | GET `/api/home` | | ordered list of blocks: type, title, endpoint |
 | GET `/api/home/banners` | | banner block |
@@ -199,25 +198,28 @@ and record in DECISIONS.md why they are not separate deployed processes
 
 ## Search
 
-PostgreSQL `pg_trgm` (available on Neon). A trigram is a 3-letter slice of a
-word; two strings that share many trigrams are similar, which is what makes
-"witchr" still find "Witcher".
+PostgreSQL `pg_trgm` (available on Neon and in plain PostgreSQL). A trigram is
+a 3-letter slice of a word; two strings that share many trigrams are similar,
+which is what makes "circut" still find "Circuit".
 
-- Normalize the query: trim, lowercase, collapse spaces. Under 2 characters
-  returns nothing.
-- Match when the name contains the query (`ILIKE '%q%'`, partial names) or
-  `word_similarity(q, name)` is above a threshold (typos).
-- Rank: name starts with the query, then contains it, then by similarity, then
-  by units sold as a tie-break.
-- A GIN trigram index on `products.name` serves both conditions.
-- The header box debounces 250 ms, cancels stale requests, supports arrow keys
-  and Enter, and links to the results page. The results page reuses the store
-  listing and filters. When nothing matches, it says so and shows best sellers.
-- Tests run against the seeded test branch: exact, prefix, mid-word, one typo,
-  swapped letters, wrong case, nonsense input.
+As built (the details and the reasons are in DECISIONS.md, entries 42 to 47):
 
-The threshold is tuned against the seed data in phase 4 and the chosen value is
-recorded with the cases that decided it.
+- The text is lowercased and split into words, at most 5. Only letters and
+  digits survive.
+- A product matches when every word matches its name: the name contains the
+  word (partial words), or `word_similarity(word, name)` is at least 0.45 and
+  the word has 4 letters or more (typos).
+- Rank: name starts with the whole text, then contains it, then contains
+  every word, then matched by similarity. Ties go to the closer match, then
+  to units sold.
+- Search is part of `GET /api/products` (the `q` parameter), so it combines
+  with every filter. `GET /api/search/suggest` serves the header dropdown.
+- The header box waits 250 ms after typing stops, cancels stale requests,
+  supports arrow keys, Enter and Escape. The results page is the store page
+  with a search heading. With no results it says so and shows best sellers.
+- Tests run every promised search against the seeded database: partial
+  words, typos, several words, searches that must find nothing, and known
+  limits.
 
 ## Checkout and keys
 

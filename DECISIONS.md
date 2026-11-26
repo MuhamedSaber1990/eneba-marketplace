@@ -428,3 +428,111 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   flaw since phase 2. Browsers keep a cover for a day, so a returning visitor
   may see the old drawing until then.
 
+## 42. Search lives in `/api/products`, not in a separate `/api/search`
+
+- **What PLAN.md said:** two endpoints, `GET /api/search?q=` for ranked
+  results and `GET /api/search/suggest?q=` for the dropdown.
+- **What was built:** search results come from `GET /api/products?q=...`.
+  Only `/api/search/suggest` is separate.
+- **Why:** a search result page is the store listing with one more condition.
+  It needs the same platform, region and price filters, the same paging and
+  the same card data. A second endpoint would have meant the same query
+  twice, kept in step by hand. With one endpoint the search line is one more
+  `AND` in the listing's `WHERE`, and every filter works with it for free.
+  The store page's own "Name" field got typo tolerance at the same time,
+  with no extra work.
+- **The suggest endpoint stays separate** because it answers a different
+  question: the best six matches, no filters, no count, cached at the edge.
+  It reuses the same matching and ranking code (`queryPage`).
+
+## 43. Each word of a search is matched on its own
+
+- **Alternatives:** comparing the whole text with the whole name; PostgreSQL
+  full-text search; Neon's BM25 and vector search extensions.
+- **Why:** a product matches when every word matches its name, either
+  because the name contains the word or because the word is similar to part
+  of the name. This is what makes "kart xbox" find "Thunder Circuit Kart Xbox
+  Key", where the words are not adjacent, and what makes "thunder zzzz" find
+  nothing. Full-text search matches whole words and does nothing for typos
+  or half-typed words. Neon's search extensions rank documents and exist
+  only on Neon, so the CI container could not run the tests.
+- **Only letters and digits reach the query.** The text is split wherever
+  there is anything else, so `%` and `_`, which are wildcards in a `LIKE`
+  pattern, never get there. A search for "%" is a search with no words and
+  finds nothing.
+
+## 44. Similarity threshold 0.45, and no typo matching under 4 letters
+
+- **How it was chosen:** I measured `word_similarity` for about 45 words
+  against the seeded names. Real typos scored 0.50 or more: "legnds" 0.50,
+  "obsidain" 0.56, "raly" 0.60, "witchlite" 0.70, "circut" 0.71. Unrelated
+  words scored 0.40 or less: "kart" against "Garage" 0.40, "tied" against
+  "Tide" 0.40, "racing" against "Rally" 0.29. 0.45 sits in the gap.
+- **The 4-letter rule:** a 3-letter word has four trigrams, and one wrong
+  letter changes most of them, so its similarity to the right word ("vwo"
+  to "Vow": 0.25) is no higher than to wrong ones. Short words must be
+  contained exactly.
+- **Known limits, each pinned by a test:** "vwo" (typo in a 3-letter word),
+  "krat" and "rouge" (swapped letters in a short word, 0.20 and 0.33) and
+  "glbal" (0.44, just under) find nothing. Search looks at names only, so
+  "racing" does not find a racing game.
+- **The threshold fits this catalog.** It was tuned on 24 invented titles. A
+  real catalog would need the measurement repeated.
+
+## 45. No trigram index, although the plan promised one
+
+- **What the plan said:** a GIN trigram index on `products.name`.
+- **What was built:** the extension only.
+- **Why:** an index that the query cannot use is dead weight, and this query
+  cannot use one. It calls `word_similarity(word, name) >= 0.45` as a
+  function inside a per-word check, and PostgreSQL only uses a trigram index
+  for the operator forms (`%`, `<%`, `LIKE`) written directly against the
+  column. With 56 rows, reading the whole table is no work at all, so
+  nothing is lost today. I did not measure it, because there is no indexed
+  version to compare against.
+- **What a large catalog would need:** the per-word condition rewritten with
+  the `<%` operator and `ILIKE` directly on `name` (one fixed slot per word),
+  the threshold set with `SET LOCAL pg_trgm.word_similarity_threshold` inside
+  a transaction, and then the GIN index. I chose the readable query for the
+  size this project has.
+
+## 46. The results page is the store page
+
+- **Alternatives:** a separate search results component.
+- **Why:** `/search?q=...` renders `StorePage` with `mode="search"`. It
+  changes the heading ("Results for ..."), adds a "Best match" sort that is
+  the default, keeps the search text when filters are cleared, and on no
+  results shows a hint and the best sellers row. Grid, filters and paging are
+  the same code, so they cannot drift apart.
+- **No "did you mean":** with a typo the page shows the matches directly.
+  Printing a corrected word would need a second step that decides which word
+  was meant.
+
+## 47. The search box: debounce, cancel, and only fresh suggestions
+
+- **Debounce:** `debounce()` (about 20 lines, in `lib/debounce.ts`, with tests)
+  waits until typing has paused for 250 ms. Typing "thund" sends one request.
+- **Cancel:** `useAsync` aborts the previous request when the text changes,
+  so a slow answer for "thu" cannot replace the answer for "thunder".
+- **Fresh only:** the list is shown only when it belongs to what is in the
+  box right now. Without that rule the old suggestions stayed visible for a
+  moment under new text, with a "See all results" line that did not match.
+- **Keyboard:** arrow keys move through the options and wrap around, Enter
+  opens the highlighted option or the results page, Escape closes the list
+  and keeps the text. The markup follows the ARIA combobox pattern, so a
+  screen reader announces the highlighted suggestion.
+- **Two bugs the browser test caught:** Enter on a highlighted suggestion
+  went to the results page, because pressing Enter in a form also activates
+  its submit button and that button reset the highlight (fixed by making it a
+  plain button). And Escape cleared the text, which is a search field's
+  default behavior (now prevented).
+
+## 48. The filter panel no longer rebuilds on every URL change
+
+- **Before:** the panel was keyed by the whole query string, so ticking a
+  platform rebuilt it. Keyboard focus was lost on every tick.
+- **Now:** it is keyed only by the three text values (name, minimum and
+  maximum price). Those inputs keep their own state while typing and need a
+  rebuild when the URL changes from outside. Checkboxes read the URL directly
+  and need none.
+

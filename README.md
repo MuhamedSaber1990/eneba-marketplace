@@ -50,6 +50,20 @@ Two things on the homepage look like facts and are not:
   the seed ran, so the block empties out over time. When a deal ends, its
   price does not go back up by itself.
 
+## Search
+
+The search box in the header works from every page. It tolerates typos and
+partial words: `circut` finds "Circuit Breakers", `forge` finds "Mythforge
+Legends", `kart xbox` finds the Xbox edition of "Thunder Circuit Kart".
+
+What it does not do:
+
+- Fix a typo in a word of three letters or fewer (`vwo` for "vow").
+- Fix swapped letters in a short word (`krat` for "kart", `rouge` for
+  "rogue").
+- Understand meaning. It searches product names, so `racing` does not find a
+  racing game.
+
 ## Tests
 
 ```
