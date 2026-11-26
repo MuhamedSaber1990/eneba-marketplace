@@ -2183,3 +2183,132 @@ Three more are in `docs/screenshots/`: `search-dropdown.png`, `search-results.pn
 - Phases 1 to 4 are done. Next is phase 5, authentication: sign up, sign in, sign out, sessions in an httpOnly cookie stored in the database, protected routes, and tests. It needs migration `004_auth.sql` for the users and sessions tables.
 
 Tell me when to start phase 5, and whether you want the in-stock ranking change first.
+
+### Prompt 20
+
+````text
+Yes, do the in-stock ranking change first, in stock before sold out within each group. Add a test for it.
+
+Then start phase 5, plan first. This is the part where security matters most, so in the plan tell me how you handle: password hashing, the cookie flags, CSRF, session expiry and sign out, limiting login attempts, and not revealing whether an email is registered. Say which of these you're doing properly and which you're leaving as a shortcut.
+````
+
+### Reply 25
+
+The ranking change is done and committed locally. The phase 5 plan follows. Nothing of phase 5 is built yet.
+
+## In-stock ranking
+
+- **The change:** one line in the ranking. Inside each group, products that can be bought now come before sold-out ones. Then the closer match, then units sold, as before.
+- **It does not cross groups.** An exact match that is sold out still ranks above a typo match that is in stock.
+- **The test** runs two searches whose results all fall in one group, "witchlite" (typo) and "witchlight" (start of the name). It fails if an in-stock product appears below a sold-out one, and it fails if the data does not contain both kinds, so it cannot pass by accident.
+- All catalog tests pass. `DECISIONS.md` entry 43 now describes the ranking and this change.
+- It goes live with the next push.
+
+## Phase 5: authentication
+
+**What gets built**
+- `POST /api/auth/signup`, `POST /api/auth/signin`, `POST /api/auth/signout`, `GET /api/auth/me`.
+- Migration `004_auth.sql`: `users`, `sessions`, `auth_attempts`.
+- A `requireUser` middleware for routes that need a signed-in user. Phase 6 puts checkout and order history behind it.
+- Frontend: sign up and sign in pages, the header showing the account and a sign out button, and a route guard that sends signed-out visitors to sign in and brings them back afterwards.
+- One new Go dependency: `golang.org/x/crypto`, for bcrypt. It is maintained by the Go team.
+
+## The six things you asked about
+
+### 1. Password hashing: done properly
+
+- **bcrypt with cost 12.** It is slow on purpose, so a stolen table cannot be guessed through quickly, and each hash carries its own random salt.
+- **Length rules:** at least 8 characters, at most 72 bytes. bcrypt ignores everything after 72 bytes, so a longer password is refused instead of being silently cut. No "must contain a symbol" rules: current guidance favors length over composition.
+- The password is never logged and never returned. The hash never leaves the backend.
+- **Shortcut:** no check against lists of leaked passwords.
+- **Why not argon2id,** which is the newer first recommendation: it needs memory settings tuned to the host, and a serverless function's memory is small and shared. bcrypt is still an accepted choice and has one number to explain.
+
+### 2. Cookie flags: done properly
+
+- **`HttpOnly`:** JavaScript cannot read it, so a script injected into the page cannot steal the session.
+- **`Secure`:** sent over HTTPS only.
+- **`SameSite=Lax`:** not sent on requests that other sites make in the background. More under CSRF.
+- **`Path=/`, no `Domain`,** and the name `__Host-session`. The `__Host-` prefix makes browsers refuse the cookie unless it is Secure, host-only and for the whole site, so a subdomain cannot plant one.
+- **Lifetime 7 days,** matching the session row.
+- **What is in it:** 32 random bytes from the system's secure generator. No user id, nothing to decode.
+- **In the database:** only a SHA-256 hash of the token. Someone who reads the sessions table cannot use what they find.
+- **Local development:** plain `http://localhost` needs the Secure flag and the prefix off. One variable in `.env` does that, it defaults to secure, and it is not set on Vercel.
+
+### 3. CSRF: done properly, without a token
+
+A CSRF attack makes your browser send a request to our site from another site, with your cookie attached. Three layers stop it:
+
+1. **`SameSite=Lax`:** the browser does not attach the cookie to another site's POST.
+2. **An Origin check:** every request that changes something must carry an `Origin` header equal to our own address, or it is refused.
+3. **JSON only:** those endpoints accept `Content-Type: application/json`. A plain HTML form on another site cannot send that, and a script can only try after a preflight request, which we do not answer.
+
+No GET request changes anything. Sign out is a POST.
+
+- **Shortcut:** no per-form CSRF token. With the three layers above and one domain for frontend and API, a token would protect nothing more, and it is one more thing to keep in sync.
+
+### 4. Session expiry and sign out: done properly, with two shortcuts
+
+- **Expiry:** a session row has `expires_at`, 7 days after sign in. Every request checks it in the query, so an expired session stops working even if the cookie is still in the browser.
+- **Sign out:** deletes the row on the server and clears the cookie. A copied token is dead from that moment, which is the reason for database sessions over self-contained tokens.
+- **A fresh token at every sign in,** so a token planted before login is useless.
+- **Cleanup:** a user's expired rows are deleted when they sign in. No scheduled job.
+- **`Cache-Control: no-store`** on every auth response, so nothing personal is kept by the edge cache.
+- **Shortcuts:**
+  - No "sign out everywhere" and no list of active sessions.
+  - Expiry is fixed at 7 days from sign in. It does not extend with use and does not shorten when idle.
+
+### 5. Limiting login attempts: a working version, with stated gaps
+
+Serverless functions share no memory, so the count lives in the database, in `auth_attempts`.
+
+- **Per email:** 5 failed sign-ins in 15 minutes, then sign-in for that email is refused until the window passes, with "Too many attempts, try again later".
+- **Per IP address:** 30 failed sign-ins in 15 minutes, to stop one source trying many emails.
+- **Sign up:** 10 per IP per hour, to stop mass account creation.
+- A successful sign in does not erase the count, so an attacker cannot reset it with their own account.
+- **Gaps, stated plainly:**
+  - Anyone who knows your email can lock your sign-in for 15 minutes by failing 5 times. That is the usual trade-off of per-account limits, and the short window keeps it small.
+  - The IP address comes from a header Vercel sets. I will verify during the build that a visitor cannot forge it, and tell you if they can.
+  - No CAPTCHA and no growing delays.
+  - Old rows are deleted as a side effect of later attempts, not on a schedule.
+
+### 6. Not revealing whether an email is registered: sign in properly, sign up as a shortcut
+
+- **Sign in, properly:** a wrong password and an unknown email give the same message, "Wrong email or password", and the same status. They also take the same time: for an unknown email the server still runs one bcrypt comparison against a dummy hash, so response time does not give it away.
+- **Sign up, a shortcut:** signing up with an email that is already registered says so. I do not see an honest way around this without sending email. The proper pattern is to answer "check your inbox" either way and let the email tell the owner, and this project has no email service. Pretending success would leave a real user unable to understand why they cannot sign in.
+  - The per-IP limit on sign up keeps this from being used to test a long list of addresses quickly.
+  - I will list it under known limitations in the README.
+
+## Decisions I am making for you
+
+1. **A demo account in the seed.** The brief asks for test credentials in the README, so the seed creates `demo@keybay.test` with a password that will be printed in the README. Anyone can sign in as that user on the live site. That is the point of a demo account, but it is a public password, so say so if you would rather create it by hand.
+2. **Emails are stored lowercase and trimmed,** with a unique index, so `You@Mail.com` and `you@mail.com` are one account.
+3. **Sign up signs you in.** No separate sign-in step afterwards and no email confirmation.
+4. **After signing in you return to where you were going.** The return address is only accepted if it is a path on this site, so a crafted link cannot bounce a user to another site after login.
+5. **What "protected" means in this phase:** `/api/auth/me` and a small account page showing your email. The real protected pages, checkout and orders, arrive in phase 6 and will use the same middleware and the same route guard.
+
+## Not built, and listed as such in the README
+
+Email verification, password reset, changing a password, deleting an account, two-factor login, social login. All but the last two need an email service.
+
+## Tests
+
+- **Without a database:** password rules, the Origin check, the cookie's attributes read back from a response, the return-address check.
+- **With the database, through the real router:**
+  - sign up, then `me` works, then sign out, then `me` is refused;
+  - the same token is refused after sign out;
+  - an expired session is refused;
+  - a duplicate email is refused;
+  - wrong password and unknown email give the identical response;
+  - the 6th failed sign-in for an email gets "too many attempts";
+  - a POST without our Origin is refused;
+  - a protected route without a cookie returns 401.
+- **Browser:** sign up, see the account in the header, reload and stay signed in, sign out, try the account page signed out and get sent to sign in, sign in and land back on it. And that JavaScript on the page cannot see the cookie.
+
+## Order of work
+
+1. Build, migrate and seed `dev`, run the tests, check in the browser.
+2. Show you the summary and the SQL.
+3. Production status, then your approval for migrate and seed. The seed adds only the demo user.
+4. Ask before pushing. Waiting locally: screenshots, the ranking change, the chat log.
+
+Tell me if the plan is ok, and what you want changed in the six points or the five decisions.
