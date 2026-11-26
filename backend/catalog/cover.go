@@ -51,15 +51,19 @@ func (c Cover) RenderSVG() string {
 }
 
 // titleFontSize picks the largest font size, up to 30, at which the longest
-// line still fits inside the cover. A bold capital letter is about 0.72 times
-// the font size wide, and the cover has 185 pixels between its margins, so a
-// line of n letters fits when n * 0.72 * size <= 185, or size <= 257 / n.
+// line fits inside the cover with room to spare.
+//
+// The cover is 225 wide and the text starts 20 from the left, so 205 remain.
+// Keeping 25 clear on the right leaves 180 for the text. A bold capital
+// letter is about 0.8 times the font size wide (wide letters such as M and W
+// are what make it that much), so a line of n letters fits when
+// n * 0.8 * size <= 180, which is size <= 225 / n.
 func titleFontSize(lines []string) int {
 	longest := 1
 	for _, line := range lines {
 		longest = max(longest, len(line))
 	}
-	return max(14, min(30, 257/longest))
+	return max(14, min(30, 225/longest))
 }
 
 // wrapWords splits text into lines of at most maxLen characters, breaking

@@ -79,9 +79,10 @@ func TestTitleFontSize(t *testing.T) {
 		want  int
 	}{
 		{"short lines get the full size", []string{"Ashen", "Crown"}, 30},
-		{"eight letters still fit at full size", []string{"Frontier"}, 30},
-		{"a ten-letter word is drawn smaller", []string{"Witchlight", "Academy"}, 25},
-		{"the longest line decides", []string{"Kart", "Thunderstorm"}, 21},
+		{"seven letters still fit at full size", []string{"Thunder", "Circuit", "Kart"}, 30},
+		{"nine letters are drawn smaller", []string{"Mythforge", "Legends"}, 25},
+		{"ten letters smaller still", []string{"Witchlight", "Academy"}, 22},
+		{"the longest line decides", []string{"Kart", "Thunderstorm"}, 18},
 		{"very long words stop shrinking at 14", []string{"Supercalifragilisticexpialidocious"}, 14},
 		{"no lines does not divide by zero", []string{}, 30},
 	}
