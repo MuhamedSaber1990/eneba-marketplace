@@ -2536,3 +2536,183 @@ I did not clean these up, because that would be a write to production you had no
 - Phases 1 to 5 are done. Next is phase 6, the largest: cart, order creation with key reservation, simulated payment, key delivery and order history. It is the third "in depth" feature, and it is where selling the same key twice has to be made impossible.
 
 Tell me when to start phase 6. I will give you the plan first. For that one I would like to spell out the order and key states and what happens at each failure point, so you can check the logic before any code exists.
+
+### Prompt 23
+
+````text
+Great, sign-in works for me too. Leave the leftover test rows, they'll expire on their own.
+
+Start phase 6, plan first. Yes, spell out the order and key states and what happens at each failure point, I want to check the logic before you write code. Also tell me how you'll prove two people can't buy the same key at the same time, I want a real test for that, not just the explanation.
+````
+
+### Reply 28
+
+Here is the phase 6 plan. Nothing is built yet. The leftover test rows on production stay as they are.
+
+**Skills read:** the Go database skill's notes on transactions and locking, and the Stripe skill's payment notes. Stripe is phase 7, but its main rule shapes this phase: an order is fulfilled in one server-side step that the payment calls, never from the page the buyer lands on. I am building that one step now, so phase 7 only has to call it.
+
+## The flow
+
+Cart → Checkout (sign-in required) → Order created, keys reserved → Payment → Keys shown. It follows the diagram in the brief.
+
+## States
+
+**A key**
+| State | Meaning |
+|---|---|
+| `available` | in stock, belongs to no order |
+| `reserved` | held for one order item until that order's deadline |
+| `sold` | paid for, belongs to that order item for good |
+
+Allowed moves: available → reserved → sold, and reserved → available when the order fails or runs out of time. A sold key never changes again. The database enforces that an available key has no order and that a reserved or sold key has one.
+
+**An order**
+| State | Meaning |
+|---|---|
+| `pending` | created, keys reserved, waiting for payment, with a deadline |
+| `paid` | payment succeeded, keys sold and shown to the buyer |
+| `failed` | payment was declined, keys released |
+| `expired` | the deadline passed without payment, keys released |
+
+Allowed moves: pending → paid, pending → failed, pending → expired. The three end states never change.
+
+## Step 1: creating the order
+
+One database transaction. Either all of it happens or none of it.
+
+1. Check the request: 1 to 10 lines, quantity 1 to 5 per line.
+2. Release what has run out of time (see "Expiry" below).
+3. Read the current price of every offer from the database. The browser sends offer ids and quantities only. No price from the browser is used.
+4. Compare the total with the total the buyer saw in the cart. If a price changed in between, stop.
+5. For every line, take the keys:
+   ```sql
+   UPDATE keys SET status = 'reserved', order_item_id = ..., reserved_until = ...
+    WHERE id IN (SELECT id FROM keys
+                  WHERE offer_id = $1 AND status = 'available'
+                  ORDER BY id LIMIT $2
+                  FOR UPDATE SKIP LOCKED)
+   ```
+   If fewer rows come back than the quantity asked for, stop.
+6. Insert the order and its items. The items copy the product name, seller name and price, so past orders do not change when the catalog does.
+7. Commit. The order is `pending` with a deadline 15 minutes away.
+
+"Stop" means the whole transaction rolls back. No order exists and no key is touched.
+
+**Why two buyers cannot take the same key.** `FOR UPDATE` locks the key rows the inner query picks until the transaction ends. `SKIP LOCKED` makes a second transaction pass over rows that are locked and look for others. So if two buyers go for the last key, the first locks it and the second finds no row. The second is told "not enough stock" immediately. Without the lock, both could read the key as available and both could update it.
+
+## Step 2: paying
+
+In this phase payment is simulated: the order page has "Pay (test)" and "Simulate a declined card". In phase 7 Stripe's webhook calls the same function.
+
+One transaction:
+1. Lock the order row.
+2. If it is already `paid`: do nothing and report success. If `failed` or `expired`: report that.
+3. If the deadline has passed: mark it `expired`, release its keys, report that.
+4. On approval: mark its reserved keys `sold` and count them. The count must equal the quantity ordered. Mark the order `paid`. Add the quantities to `product_sales`, which is what the Best sellers block reads.
+5. On decline: mark the order `failed` and release its keys.
+
+## Expiry
+
+An expired order does not release its keys by itself, and there is no scheduled job on the free tier. So the cleanup runs at the start of every "create order" and every "pay":
+
+1. `UPDATE orders SET status = 'expired' WHERE status = 'pending' AND deadline < now()`, returning the ids.
+2. Release the reserved keys of exactly those orders.
+
+Going through the order row first matters. If a payment for an order is in progress, it holds the lock on that order row. The cleanup waits for it, then sees the order is `paid` and leaves it alone. So a key cannot be released while it is being paid for.
+
+Reading an order also treats "pending and past its deadline" as expired, so the buyer never sees a stale "pending".
+
+## What happens at each failure point
+
+| # | What goes wrong | Result |
+|---|---|---|
+| 1 | The cart holds an offer that no longer exists, or a bad quantity | 400, nothing created |
+| 2 | A price changed after the cart was shown | 409 with the new prices. Nothing reserved. The cart shows the new total and asks again |
+| 3 | Not enough stock, including losing a race for the last key | 409 naming the line and how many are left. Nothing reserved for any line |
+| 4 | The database fails in the middle of creating an order | Rollback. No order, no reserved key |
+| 5 | The buyer creates the order and walks away | After 15 minutes the order is `expired` and its keys are available again |
+| 6 | The payment is declined | Order `failed`, keys released at once. The cart is still filled, so they can try again |
+| 7 | "Pay" is clicked twice, or in two tabs | The order row lock makes the second wait. It then sees `paid` and does nothing. Keys are sold once and sales counted once |
+| 8 | Payment arrives after the deadline | Refused. Order `expired`, keys released |
+| 9 | Payment succeeds but the response is lost on the way back | Reloading the order page shows `paid` with the keys. Paying again does nothing |
+| 10 | Someone opens another person's order address | 404, the same as an order that does not exist |
+| 11 | The buyer is not signed in at checkout | Sent to sign in and back. The cart is in the browser and survives |
+| 12 | Two orders together want more keys than exist | Each key goes to exactly one of them. The others get row 3 |
+
+**One I am flagging for phase 7, not solving now:** with a real provider, money can be taken after our deadline has passed and the keys are gone. In this phase payment and fulfilment are one transaction, so it cannot happen. For Stripe I will make its payment page expire before our reservation does, and handle the leftover case explicitly.
+
+## Proving two people cannot buy the same key
+
+Real tests, against a real database, run locally and on every push in CI.
+
+**Test 1, the last key.** Create an offer with exactly 1 key. Start 20 goroutines, each a different buyer, all released at the same instant, each trying to order that key. Assert:
+- exactly 1 order is created;
+- exactly 19 are told "not enough stock";
+- the key row is reserved once, for that one order.
+
+**Test 2, more buyers than stock.** An offer with 5 keys, 20 buyers each wanting 2. Assert:
+- exactly 2 orders succeed (4 keys);
+- no key is attached to two order items;
+- the total of reserved keys equals the total of quantities in the orders that succeeded;
+- no order got part of what it asked for.
+
+**Test 3, paying twice.** One pending order, 10 goroutines paying it at once. Assert: paid once, each key sold once, and `product_sales` went up by the quantity exactly once.
+
+**Test 4, expiry against payment.** An order at its deadline, with a payment and a cleanup started together. Assert that the result is one of the two valid outcomes (paid with its keys sold, or expired with its keys released) and never a mix.
+
+**Showing the tests can fail.** A test that always passes proves nothing. During the build I will temporarily swap the reservation query for a naive version without the lock (read available keys, then update them), run test 1 and test 2, and show you the output where they fail. Then I put the real query back. That swap is not committed.
+
+**Limits of the proof, stated plainly:**
+- A test shows the property held in the runs I made. It is strong evidence, not a mathematical proof. The actual guarantee comes from PostgreSQL's row locks, which the explanation above describes.
+- I will run each concurrency test many times in a loop and also with Go's race detector.
+- The tests use a connection pool large enough that the transactions really overlap. I will state how many ran at once.
+
+## What gets built
+
+**Database: `005_orders.sql`**
+- `orders`: a UUID id, user, status, total, deadline, payment reference, timestamps.
+- `order_items`: order, offer, the copied names and price, quantity.
+- Two new columns on `keys`: which order item holds it, and until when.
+
+**Backend: `backend/checkout/`**
+- `POST /api/cart/price`: prices a cart and reports stock. Public, since the cart exists before sign-in.
+- `POST /api/orders`: creates the order. Signed-in only.
+- `POST /api/orders/{id}/pay`: the simulated payment. Signed-in only.
+- `GET /api/orders` and `GET /api/orders/{id}`: history and detail. Keys are included only when the order is paid and belongs to the caller.
+- All of them behind the same Origin check and `requireUser` from phase 5.
+
+**Frontend**
+- "Add to cart" on each offer of the product page, and a count on the header's cart icon.
+- Cart page: lines priced by the server, quantity controls, remove, total.
+- Checkout page: the summary and "Place order". Behind the route guard.
+- Order page: while pending, a countdown and the two payment buttons. Once paid, the keys with a copy button.
+- Order history, linked from the account page.
+- Cart logic as plain functions with unit tests: add, change quantity, remove, limits, and reading a damaged saved cart safely.
+
+## Decisions I am making for you
+
+1. **Reservations last 15 minutes.** `PLAN.md` said 30. Shorter means stock held by abandoned orders comes back sooner.
+2. **No card form.** Two buttons, clearly labelled as a test. A form that looks like it wants a card number invites someone to type a real one, and phase 7 replaces it with Stripe's page anyway.
+3. **Order ids are random UUIDs,** not 1, 2, 3. An address like `/orders/2` invites trying `/orders/3`, and counting ids reveals how many orders exist. Ownership is checked regardless.
+4. **The price guard in step 4,** so nobody pays a price they did not see.
+5. **Limits:** 5 per line, 10 lines per order, and at most 3 pending orders per user. The last one stops a single account from reserving all the stock over and over.
+6. **The cart is emptied only when an order is paid.** After a declined payment or an expired order it is still there.
+7. **Another user's order is answered with 404, not 403,** so the answer does not confirm the order exists.
+8. **The database's default isolation level, with explicit row locks.** The Go skill suggests the strictest level for inventory. That level makes transactions fail and need retrying whenever they overlap. Explicit locks give the guarantee I need and say exactly which rows are protected, which is also easier to explain.
+
+## Shortcuts, stated
+
+- Keys are stored as plain text in the database. A real shop would encrypt them at rest.
+- No email with the keys. They are on the order page and stay there.
+- No refunds, no cancel button, no invoices, no tax.
+- No guest checkout.
+- An account can still hold up to 3 orders' worth of stock for 15 minutes at a time.
+
+## Order of work
+
+1. Build, migrate `dev`, run the tests including the concurrency ones and the deliberate-failure demonstration, check in the browser.
+2. Show you the summary, the SQL and the test output.
+3. Production status, then your approval for the migration. No seed step.
+4. Ask before pushing.
+
+Tell me if the states and the failure table match what you expect, and what you want changed in the eight decisions.
