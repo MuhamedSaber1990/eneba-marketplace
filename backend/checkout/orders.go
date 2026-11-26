@@ -78,8 +78,14 @@ type Order struct {
 	// by the database's clock. The order page counts down from this number.
 	// It does not compare ExpiresAt with the visitor's own clock, which may
 	// be wrong by minutes or hours. Zero for an order that is not pending.
-	SecondsLeft int         `json:"seconds_left"`
-	PaidAt      *time.Time  `json:"paid_at"` // null until paid
+	SecondsLeft int        `json:"seconds_left"`
+	PaidAt      *time.Time `json:"paid_at"` // null until paid
+	// Refunded is true when a payment arrived too late to be fulfilled and
+	// was sent back.
+	Refunded bool `json:"refunded"`
+	// PaymentMode tells the order page which payment step to show:
+	// "simulated" or "stripe". The HTTP handler fills it in.
+	PaymentMode string      `json:"payment_mode"`
 	Items       []OrderItem `json:"items"`
 }
 
@@ -415,10 +421,11 @@ func (s *Store) GetOrder(ctx context.Context, userID int64, orderID string) (Ord
 		SELECT id::text, `+displayStatusSQL+`, total_cents, created_at, expires_at, paid_at,
 		       CASE WHEN status = 'pending'
 		            THEN GREATEST(0, FLOOR(EXTRACT(EPOCH FROM expires_at - now())))::int
-		            ELSE 0 END
+		            ELSE 0 END,
+		       refund_ref IS NOT NULL
 		  FROM orders
 		 WHERE id = $1 AND user_id = $2`, orderID, userID,
-	).Scan(&order.ID, &order.Status, &order.TotalCents, &order.CreatedAt, &order.ExpiresAt, &order.PaidAt, &order.SecondsLeft)
+	).Scan(&order.ID, &order.Status, &order.TotalCents, &order.CreatedAt, &order.ExpiresAt, &order.PaidAt, &order.SecondsLeft, &order.Refunded)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Order{}, ErrOrderNotFound
 	}

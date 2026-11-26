@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stripe/stripe-go/v87"
 
 	"eneba-marketplace/backend/config"
 	"eneba-marketplace/backend/db"
@@ -506,4 +507,130 @@ func TestOrderRoutesAreGuarded(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ---- Payment modes and the Stripe webhook ----
+
+const testWebhookSecret = "whsec_test_secret_used_only_in_tests"
+
+// signedWebhook builds a webhook request the way Stripe sends one.
+func signedWebhook(t *testing.T, secret, eventType string, session map[string]any) (body string, signature string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"id": "evt_test_http", "object": "event", "type": eventType,
+		"data": map[string]any{"object": session},
+	})
+	if err != nil {
+		t.Fatalf("building the payload: %v", err)
+	}
+	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: secret})
+	return string(signed.Payload), signed.Header
+}
+
+// Exactly one way of paying exists at a time. In Stripe mode the simulated
+// endpoint must be gone: otherwise one request would mark an order paid
+// without any payment.
+func TestPaymentModeDecidesWhichRoutesExist(t *testing.T) {
+	at := newAuthTest(t)
+	cookie := at.signUp(goodPassword)
+	orderPath := "/api/orders/0b0f3a52-8f0f-4c0a-9d0e-2b7c1c3d4e5f"
+
+	simulated := at.router // built with Config{}, which means simulated
+	stripeMode := NewRouter(at.pool, Config{PaymentMode: PaymentStripe, StripeWebhookSecret: testWebhookSecret})
+
+	tests := []struct {
+		name   string
+		router http.Handler
+		req    request
+		want   int
+	}{
+		// 404 from the order lookup, not from the mode: the route exists.
+		{"simulated mode: the pay endpoint exists", simulated, request{method: "POST", path: orderPath + "/pay", body: `{"outcome":"approve"}`, origin: testOrigin, contentType: "application/json", cookie: cookie}, http.StatusNotFound},
+		{"simulated mode: no Stripe checkout", simulated, request{method: "POST", path: orderPath + "/checkout", origin: testOrigin, contentType: "application/json", cookie: cookie}, http.StatusNotFound},
+		{"simulated mode: no webhook", simulated, request{method: "POST", path: "/api/stripe/webhook", body: "{}"}, http.StatusNotFound},
+
+		{"stripe mode: the simulated pay endpoint is gone, even signed in", stripeMode, request{method: "POST", path: orderPath + "/pay", body: `{"outcome":"approve"}`, origin: testOrigin, contentType: "application/json", cookie: cookie}, http.StatusNotFound},
+		{"stripe mode: checkout needs a session", stripeMode, request{method: "POST", path: orderPath + "/checkout", origin: testOrigin, contentType: "application/json"}, http.StatusUnauthorized},
+		{"stripe mode: checkout needs the site's own Origin", stripeMode, request{method: "POST", path: orderPath + "/checkout", origin: "https://evil.example", contentType: "application/json", cookie: cookie}, http.StatusForbidden},
+		// No gateway is configured in this test, so paying is refused, not simulated.
+		{"stripe mode without keys: paying is unavailable", stripeMode, request{method: "POST", path: orderPath + "/checkout", origin: testOrigin, contentType: "application/json", cookie: cookie}, http.StatusServiceUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			at.router = tt.router
+			defer func() { at.router = simulated }()
+			if w := at.do(tt.req); w.Code != tt.want {
+				t.Errorf("status %d, want %d; body %s", w.Code, tt.want, w.Body)
+			}
+		})
+	}
+
+	// The simulated mode's "404" for the pay endpoint really is the order
+	// lookup: the body says so. In Stripe mode the route itself is missing.
+	at.router = simulated
+	w := at.do(request{method: "POST", path: orderPath + "/pay", body: `{"outcome":"approve"}`, origin: testOrigin, contentType: "application/json", cookie: cookie})
+	if !strings.Contains(w.Body.String(), "order not found") {
+		t.Errorf("simulated mode: body %s, want the order lookup's message", w.Body)
+	}
+	at.router = stripeMode
+	w = at.do(request{method: "POST", path: orderPath + "/pay", body: `{"outcome":"approve"}`, origin: testOrigin, contentType: "application/json", cookie: cookie})
+	if !strings.Contains(w.Body.String(), "route not found") {
+		t.Errorf("stripe mode: body %s, want the missing route's message", w.Body)
+	}
+	at.router = simulated
+}
+
+// The webhook has no cookie and no Origin check. Its signature is all that
+// stands between the internet and "this order is paid".
+func TestStripeWebhookChecksTheSignature(t *testing.T) {
+	at := newAuthTest(t)
+	at.router = NewRouter(at.pool, Config{PaymentMode: PaymentStripe, StripeWebhookSecret: testWebhookSecret})
+
+	session := map[string]any{
+		"id": "cs_test_http", "client_reference_id": "0b0f3a52-8f0f-4c0a-9d0e-2b7c1c3d4e5f",
+		"payment_status": "paid", "payment_intent": "pi_test_http", "amount_total": 1999, "currency": "eur",
+	}
+	post := func(body, signature string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, "/api/stripe/webhook", strings.NewReader(body))
+		if signature != "" {
+			r.Header.Set("Stripe-Signature", signature)
+		}
+		w := httptest.NewRecorder()
+		at.router.ServeHTTP(w, r)
+		return w
+	}
+
+	body, signature := signedWebhook(t, testWebhookSecret, "checkout.session.completed", session)
+
+	t.Run("a correctly signed event is accepted, with no cookie and no Origin", func(t *testing.T) {
+		// The order does not exist, so nothing is fulfilled, but the request
+		// passed the signature check and is answered 200.
+		w := post(body, signature)
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ignored") {
+			t.Errorf("status %d, body %s", w.Code, w.Body)
+		}
+	})
+	t.Run("no signature", func(t *testing.T) {
+		if w := post(body, ""); w.Code != http.StatusBadRequest {
+			t.Errorf("status %d, want 400", w.Code)
+		}
+	})
+	t.Run("signed with another secret", func(t *testing.T) {
+		_, forged := signedWebhook(t, "whsec_a_guess", "checkout.session.completed", session)
+		if w := post(body, forged); w.Code != http.StatusBadRequest {
+			t.Errorf("status %d, want 400", w.Code)
+		}
+	})
+	t.Run("the body changed after signing", func(t *testing.T) {
+		tampered := strings.Replace(body, `"amount_total":1999`, `"amount_total":1`, 1)
+		if w := post(tampered, signature); w.Code != http.StatusBadRequest {
+			t.Errorf("status %d, want 400", w.Code)
+		}
+	})
+	t.Run("an event type the shop does not use", func(t *testing.T) {
+		other, otherSignature := signedWebhook(t, testWebhookSecret, "customer.created", map[string]any{"id": "cus_1"})
+		if w := post(other, otherSignature); w.Code != http.StatusOK {
+			t.Errorf("status %d, want 200", w.Code)
+		}
+	})
 }

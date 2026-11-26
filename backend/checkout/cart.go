@@ -40,6 +40,9 @@ type Store struct {
 	// sale, an offer that is running low gets freshly generated keys. It is
 	// off unless set, and it is set only for the public demo site.
 	RestockSold bool
+
+	// Gateway is the payment provider. It is nil when payment is simulated.
+	Gateway Gateway
 }
 
 func NewStore(db *pgxpool.Pool) *Store {

@@ -9,7 +9,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 
 	"eneba-marketplace/backend/db"
@@ -30,12 +29,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("database: %v", err)
 		}
-		// InsecureCookies is left at false: Secure cookies with the __Host-
-		// prefix. DEMO_RESTOCK is set in the Vercel project for the public
-		// demo, so the store cannot be bought empty.
-		router = httpapi.NewRouter(pool, httpapi.Config{
-			DemoRestock: os.Getenv("DEMO_RESTOCK") == "1",
-		})
+		// The settings come from the Vercel project's environment variables.
+		router = httpapi.NewRouter(pool, httpapi.ConfigFromEnv())
 	})
 	router.ServeHTTP(w, r)
 }

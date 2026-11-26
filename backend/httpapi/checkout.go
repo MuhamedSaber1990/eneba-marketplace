@@ -44,7 +44,7 @@ func (api *API) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	if writeCheckoutError(w, r, err) {
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"order": order})
+	writeJSON(w, http.StatusCreated, map[string]any{"order": api.withMode(order)})
 }
 
 // handlePayOrder is the simulated payment: the buyer chooses whether the
@@ -70,14 +70,14 @@ func (api *API) handlePayOrder(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": "This order can no longer be paid.",
 			"code":  "not_payable",
-			"order": order,
+			"order": api.withMode(order),
 		})
 		return
 	}
 	if writeCheckoutError(w, r, err) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"order": order})
+	writeJSON(w, http.StatusOK, map[string]any{"order": api.withMode(order)})
 }
 
 // handleGetOrder returns one of the signed-in user's orders. Keys are part
@@ -88,7 +88,7 @@ func (api *API) handleGetOrder(w http.ResponseWriter, r *http.Request) {
 	if writeCheckoutError(w, r, err) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"order": order})
+	writeJSON(w, http.StatusOK, map[string]any{"order": api.withMode(order)})
 }
 
 // handleListOrders returns the signed-in user's order history.
@@ -99,6 +99,13 @@ func (api *API) handleListOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"orders": orders})
+}
+
+// withMode adds the active payment mode to an order, so the order page knows
+// which payment step to show.
+func (api *API) withMode(order checkout.Order) checkout.Order {
+	order.PaymentMode = api.config.PaymentMode
+	return order
 }
 
 // writeCheckoutError turns an error from package checkout into a response.
@@ -133,6 +140,13 @@ func writeCheckoutError(w http.ResponseWriter, r *http.Request, err error) bool 
 			"offer_id":  stock.OfferID,
 			"requested": stock.Requested,
 		})
+	case errors.Is(err, checkout.ErrOrderNotPayable):
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "This order can no longer be paid.",
+			"code":  "not_payable",
+		})
+	case errors.Is(err, checkout.ErrNoGateway):
+		writeError(w, http.StatusServiceUnavailable, "Card payments are not available right now.")
 	case errors.Is(err, checkout.ErrTooManyPending):
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": "You have unpaid orders waiting. Pay one, or wait for it to run out, before starting another.",

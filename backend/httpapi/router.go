@@ -23,6 +23,17 @@ type Config struct {
 	// after a sale, so the public demo cannot be bought empty. See
 	// backend/checkout/restock.go. A real shop would leave it off.
 	DemoRestock bool
+
+	// PaymentMode is PaymentSimulated or PaymentStripe. It decides which
+	// payment routes exist and which payment step the order page shows.
+	PaymentMode string
+
+	// Gateway is the payment provider, used in Stripe mode. It is nil in
+	// simulated mode, and also in Stripe mode when the keys are missing.
+	Gateway checkout.Gateway
+
+	// StripeWebhookSecret is what the webhook's signatures are checked with.
+	StripeWebhookSecret string
 }
 
 // API carries what the handlers need. Handlers are methods on it, so they can
@@ -42,8 +53,12 @@ type API struct {
 // db may be nil when DATABASE_URL is missing. The health check reports that,
 // and every other route answers 503 instead of crashing.
 func NewRouter(db *pgxpool.Pool, config Config) http.Handler {
+	if config.PaymentMode == "" {
+		config.PaymentMode = PaymentSimulated
+	}
 	checkoutStore := checkout.NewStore(db)
 	checkoutStore.RestockSold = config.DemoRestock
+	checkoutStore.Gateway = config.Gateway
 
 	api := &API{
 		db:       db,
@@ -83,10 +98,18 @@ func NewRouter(db *pgxpool.Pool, config Config) http.Handler {
 	// signed-in user, and the POSTs must come from the site itself.
 	mux.HandleFunc("POST /api/cart/price", api.needsDB(sameOrigin(api.handlePriceCart)))
 	mux.HandleFunc("POST /api/orders", api.needsDB(sameOrigin(api.requireUser(api.handleCreateOrder))))
-	mux.HandleFunc("POST /api/orders/{id}/pay", api.needsDB(sameOrigin(api.requireUser(api.handlePayOrder))))
 	mux.HandleFunc("GET /api/orders", api.needsDB(api.requireUser(api.handleListOrders)))
 	mux.HandleFunc("GET /api/orders/{id}", api.needsDB(api.requireUser(api.handleGetOrder)))
 
+	// Paying. Which of these exist depends on the payment mode.
+	//   simulated: the buyer picks the outcome with a button.
+	//   stripe:    the buyer is sent to Stripe, and Stripe reports the result
+	//              to the webhook. The webhook is called by Stripe's servers,
+	//              so it has no session and no Origin check; its signature
+	//              is what proves where it came from.
+	mux.HandleFunc("POST /api/orders/{id}/pay", api.simulatedOnly(api.needsDB(sameOrigin(api.requireUser(api.handlePayOrder)))))
+	mux.HandleFunc("POST /api/orders/{id}/checkout", api.stripeOnly(api.needsDB(sameOrigin(api.requireUser(api.handleStartCheckout)))))
+	mux.HandleFunc("POST /api/stripe/webhook", api.stripeOnly(api.needsDB(api.handleStripeWebhook)))
 	// Anything else under /api is an unknown route. Answer in JSON, not with
 	// Go's plain-text 404, so the frontend can parse every response.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
