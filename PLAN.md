@@ -79,7 +79,8 @@ eneba-marketplace/
   cmd/server/main.go      local and Render entry point, listens on PORT
   cmd/migrate/main.go     runs migrations/*.sql in order
   cmd/seed/main.go        invented products, sellers, offers, keys, homepage content
-  internal/
+  backend/
+    config/               .env loader for local runs
     httpapi/              router, JSON helpers, auth middleware
     catalog/              products, offers, store listing
     search/               search and suggestions

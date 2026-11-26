@@ -98,3 +98,44 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **Why:** computed styles give exact colors, sizes and weights. They are
   recorded in `docs/design-reference.md`. Finding worth noting: Eneba uses
   square corners everywhere and the open-source Metropolis font.
+
+## 13. Go packages in `backend/`, not `internal/`
+
+- **Alternatives:** the conventional `internal/` folder, as first planned.
+- **Why:** Go only lets code import an `internal` package from inside the
+  parent folder's tree. Vercel compiles `api/index.go` through a wrapper it
+  generates itself, and I did not want the first deploy to depend on where
+  that wrapper lives. This is a precaution, not a problem I reproduced. The
+  module is named `eneba-marketplace` (no domain) because it is an
+  application, not a library anyone imports.
+
+## 14. The health check reports a missing database instead of crashing
+
+- **Alternatives:** exit at startup when `DATABASE_URL` is missing or wrong.
+- **Why:** `GET /api/health` answers 503 with `{"database": "not configured"}`
+  or `"unreachable"`, and the homepage shows it. A wrong connection string on
+  the host is then visible in the browser in seconds, where a crashed function
+  only shows a generic error. The real error text goes to the server log, not
+  to the visitor.
+
+## 15. Metropolis through `@fontsource/metropolis`
+
+- **Alternatives:** a font CDN; Arial as the fallback only.
+- **Why:** the package puts the font files in the build, so the site serves
+  them itself and makes no request to a third party. Only the four weights the
+  design uses are imported (400, 600, 700, 800).
+
+## 16. The shop is called "Keybay"
+
+- **Alternatives:** using Eneba's name and logo.
+- **Why:** the brief asks for Eneba's style, and the assignment rules I set
+  say not to copy their logo or assets. A text wordmark with a yellow bar
+  keeps the look without the trademark. The footer says the site is a demo and
+  is not affiliated with Eneba.
+
+## 17. Tiny `.env` loader instead of a library
+
+- **Alternatives:** `godotenv`; exporting variables by hand in the shell.
+- **Why:** it is about 20 lines (`backend/config/dotenv.go`) and I can explain
+  each one. It only runs in `cmd/server`; on Vercel the variables come from
+  the host.
