@@ -878,3 +878,109 @@ Phase 2 creates the tables and seed data, and they must exist in the production 
 2. You run the two commands yourself against production when I tell you.
 
 Tell me which you prefer, and whether to start phase 2: schema, migrations, seed data (about 60 invented products, 8 sellers, offers and keys), then the store page and the product page.
+
+### Prompt 5
+
+````text
+Before phase 2, install these skills at project scope for this repo. Research is already done; follow this list.
+
+Rules
+- Install into ~/eneba-marketplace/.claude/skills only (project scope, no -g).
+- Keep them local: nothing from this goes into git. Before installing, append these lines to .git/info/exclude (not .gitignore): .claude/  .agents/  skills-lock.json  .archify/
+- Do not commit anything for this step and do not change any tracked file.
+- Install with: npx --yes skills add <repo> --skill <name> -a claude-code -y   (run from the repo root). Run "npx --yes skills add <repo> --list" first to confirm each name exists.
+
+Skills
+1. tt-a1i/archify: archify (README architecture overview and diagrams)
+2. kepano/obsidian-skills: obsidian-markdown, obsidian-bases, json-canvas, obsidian-cli, obsidian-headless, defuddle, knap (notes for the phase 8 walkthrough)
+3. neondatabase/agent-skills: neon-postgres (pooled vs direct connections, branches, migrations)
+4. stripe/ai: stripe-best-practices (Checkout and webhooks, phase 7)
+5. samber/cc-skills-golang: golang-code-style, golang-error-handling, golang-testing, golang-database
+
+After installing
+- Read each SKILL.md and search the skills' scripts for downloads, credential handling and file deletion. Tell me the installer's risk ratings and remove any skill that looks unsafe.
+- Confirm "git status --short" shows nothing new.
+- A global archify already exists on this PC and a personal skill overrides a project one with the same name. Tell me which copy loads; do not change the global one.
+- Obsidian is not installed here, so obsidian-cli, obsidian-headless and defuddle will sit unused. Do not install the app or create a vault.
+- These skills must not change the plan: keep the Go code on the standard library, few dependencies, and explain what you write, as PLAN.md says.
+
+Report the final list of installed skills with their sources, then stop and wait for me.
+````
+
+### Reply 10
+
+All 14 skills are installed at project scope, none looked unsafe, and nothing was removed. `git status --short` shows nothing new, and no tracked file was changed or committed.
+
+## Installed skills
+
+| Skill | Source | Gen | Socket | Snyk |
+|---|---|---|---|---|
+| archify | tt-a1i/archify | Med Risk | 0 alerts | Low Risk |
+| obsidian-markdown | obsidianmd/obsidian-skills | Safe | 0 alerts | Low Risk |
+| obsidian-bases | obsidianmd/obsidian-skills | Safe | 0 alerts | Low Risk |
+| json-canvas | obsidianmd/obsidian-skills | Safe | 0 alerts | Low Risk |
+| obsidian-cli | obsidianmd/obsidian-skills | Med Risk | 0 alerts | Low Risk |
+| obsidian-headless | obsidianmd/obsidian-skills | Safe | 0 alerts | Med Risk |
+| defuddle | obsidianmd/obsidian-skills | Safe | 0 alerts | Med Risk |
+| knap | obsidianmd/obsidian-skills | Safe | 0 alerts | Med Risk |
+| neon-postgres | neondatabase/agent-skills | Safe | 0 alerts | Low Risk |
+| stripe-best-practices | stripe/ai | Safe | 0 alerts | Med Risk |
+| golang-code-style | samber/cc-skills-golang | Safe | 0 alerts | Low Risk |
+| golang-error-handling | samber/cc-skills-golang | Safe | 0 alerts | Low Risk |
+| golang-testing | samber/cc-skills-golang | Safe | 0 alerts | Low Risk |
+| golang-database | samber/cc-skills-golang | Safe | 0 alerts | Low Risk |
+
+- **Location:** all in `~/eneba-marketplace/.claude/skills`. The installer also wrote `skills-lock.json`. It did not create `.agents/` or `.archify/`.
+- **Source rename:** `kepano/obsidian-skills` has moved to `obsidianmd/obsidian-skills`. The installer followed the redirect, so the lock file records the new name.
+- **Excludes:** the four lines are in `.git/info/exclude`, added before installing.
+
+## Safety review
+
+Thirteen of the skills are markdown only (the four Go ones also carry an `evals.json`). Only archify ships code: about 550 files, mostly Node scripts.
+
+**How much I read:** eight SKILL.md files in full (archify, neon-postgres, stripe-best-practices, golang-error-handling, defuddle, knap, obsidian-cli, obsidian-headless). For the other six I read the header and searched for commands, installs, links, secrets and deletion rather than reading every line. I did not read their `references/` files.
+
+**archify's scripts:**
+- **Downloads:** no install hooks and no `node_modules`. `finalize` runs a bounded update check over the network on each delivery.
+- **Credentials:** one script (`import-review.mjs`) reads `GH_TOKEN` or `GITHUB_TOKEN` and sends it only to github.com, for pull request imports. We won't use that feature.
+- **Deletion:** limited to its own temp, cache and output files.
+- **Other:** it runs `git`, `node` and a browser opener as child processes. It also reads `~/.claude/CLAUDE.md` to find its mode setting.
+
+**Behaviors worth knowing, none of them unsafe:**
+- **archify makes pages unasked.** Its default "proactive" mode produces an HTML explainer page when an answer is complex. It only writes a mode line into `~/.claude/CLAUDE.md` if you ask it to change mode.
+- **neon-postgres** tells the agent to first install its parent `neon` skill. I will not.
+- **defuddle, knap and obsidian-headless** suggest `npm install -g` for their tools. That is the likely reason for Snyk's "Med Risk". I will not install them.
+- **obsidian-cli** can run JavaScript inside Obsidian and delete notes. It is inert here without the app.
+- **The Go skills** push `testify`, `samber/oops`, `slog`, `gotests`, build tags and parallel sub-agents. I will ignore all of that: standard library, few dependencies, explained code, as `PLAN.md` says. Where they agree with the plan (pgx, no ORM, parameterized queries, wrapped errors, table-driven tests), I'll use them.
+
+## Which archify loads
+
+The global copy wins. `~/.claude/skills/archify` is version 3.2.0, and the project copy is 3.3.2. A personal skill overrides a project skill with the same name, so the newer project copy is shadowed. I did not touch the global one. No other installed skill clashes with a global name.
+
+## Two things you should know
+
+- **This session does not list the new skills.** It was started in `system32`, and project skills load for sessions started inside the repo. I can still read their files directly, but for them to trigger normally, start the next session from `~/eneba-marketplace`.
+- **The neon skill contradicts part of our setup.** It says migrations should use the direct connection string, not the pooled one, because the pooler can break schema changes. `.env` only has the pooled string. For phase 2 I suggest adding a second variable, `DATABASE_URL_UNPOOLED`, used only by the migrate and seed commands.
+
+## Chat log
+
+This turn is not in `docs/chat-log.md`. That file is tracked, and you said not to change any tracked file in this step. I'll add this prompt and reply with the next log update unless you want it left out.
+
+Obsidian was not installed and no vault was created. Waiting for you.
+
+### Prompt 6
+
+````text
+update docs/chat-log.md to its last reply and commit
+````
+
+### Reply 11
+
+The chat log is up to date and committed. It now includes the skills prompt and my report (Prompt 5, Reply 10) and this exchange (Prompt 6, Reply 11).
+
+- The commit is local only. I did not push, because a push to `main` triggers a production deploy and you asked only for a commit. Say the word and I'll push it.
+- Nothing else changed: `git status --short` is empty.
+
+Two questions from earlier are still open before phase 2:
+1. How to run migrations against production: `vercel env pull` into a temporary git-ignored file (my recommendation), or you run the commands yourself.
+2. Whether to add `DATABASE_URL_UNPOOLED` (the direct Neon string) to `.env` for the migrate and seed commands.
