@@ -2716,3 +2716,164 @@ Real tests, against a real database, run locally and on every push in CI.
 4. Ask before pushing.
 
 Tell me if the states and the failure table match what you expect, and what you want changed in the eight decisions.
+
+### Prompt 24
+
+````text
+I went through the states and the failure table, the logic makes sense to me. All eight decisions are fine, including 15 minutes instead of 30. Build it.
+
+One thing to add to DECISIONS.md: with SKIP LOCKED, a buyer can be told "not enough stock" while the other buyer's order later fails or expires and the key comes back. I'm ok with that, just write it down as a known trade-off and say what the alternative would be.
+
+And yes, show me the output where the tests fail with the naive query.
+````
+
+### Reply 29
+
+Phase 6 is built and working locally against `dev`. Production is untouched and nothing is pushed. The most important thing in this summary is that the naive-query demonstration caught a flaw in my own test, so I am putting that first.
+
+## The naive query, and what it showed about my test
+
+**The naive version:** read which keys are available, then update them in a second statement, with no lock. That is the version I described in the plan.
+
+**First attempt: test 1 did not fail.**
+```
+20 buyers, up to 20 calls in flight at once: 1 got the key, 19 were told it is out of stock
+--- PASS: TestConcurrentBuyersOfTheLastKey
+20 buyers wanting 2 each from 5 keys: 20 orders filled, 0 refused
+    20 orders were created, want exactly 2
+    18 order items hold a different number of keys than their quantity
+--- FAIL: TestConcurrentBuyersWithMoreDemandThanStock
+```
+Test 2 failed as it should. Test 1 passed with a query that cannot be right. A test that passes against broken code proves nothing, so I traced it.
+
+**The cause was in my test, not in the code.** A connection pool opens its connections one at a time, and each takes a couple of hundred milliseconds. The trace showed one buyer finishing its whole order at second 53.431 and the other 19 arriving between 53.642 and 53.688. The first buyer was done before anyone else began. Twenty goroutines were "in flight", but no two transactions ever met.
+
+**The fix:** `warmUp` opens every connection in the pool before the gate is released, so all 20 start with a connection in hand.
+
+**Second attempt, same naive query: both tests fail.**
+```
+20 buyers, up to 20 calls in flight at once on a pool of 20 connections: 20 got the key, 0 were told it is out of stock
+    20 orders were created for 1 key, want exactly 1
+    0 buyers were told out of stock, want 19
+    19 order items hold fewer keys than they were sold
+--- FAIL: TestConcurrentBuyersOfTheLastKey
+20 buyers wanting 2 each from 5 keys, ...: 20 orders filled, 0 refused
+    20 orders were created, want exactly 2
+    19 order items hold a different number of keys than their quantity
+    keys: 3 available, 2 reserved, 0 sold; with 20 orders of 2 each out of 5 keys
+--- FAIL: TestConcurrentBuyersWithMoreDemandThanStock
+```
+Without the lock, 20 people each "bought" the one key. That is the bug the real query prevents.
+
+**With the real query restored:**
+```
+20 buyers, up to 20 calls in flight at once on a pool of 20 connections: 1 got the key, 19 were told it is out of stock
+20 buyers wanting 2 each from 5 keys, ...: 2 orders filled, 18 refused
+```
+Tests 1, 2 and 3 passed 10 times in a row each, 30 runs.
+
+I also tried a second naive variant: the real statement with only `FOR UPDATE SKIP LOCKED` removed. Test 2 failed on it too, with 8 to 16 orders for 5 keys.
+
+The naive code was a temporary edit. It is not in the repository, and I checked the real statement is back.
+
+## The trade-off you asked me to write down
+
+It is entry 59 in `DECISIONS.md`:
+- **What can happen:** a buyer is told "not enough stock" while the last key is held by someone else's unpaid order. If that order is declined or expires, the key comes back, and the buyer was turned away from a key that ended up unsold.
+- **Why it is accepted:** the answer was true when given, the buyer learns at once, and nothing is oversold.
+- **The alternative:** plain `FOR UPDATE` without `SKIP LOCKED` would make the second buyer wait, but only for the split second in which the first order is being created. The first buyer's reservation lasts up to 15 minutes after that, and no request can wait that long. Really closing the gap needs a waiting list: record the second buyer's interest and offer them the key when it is released. That is a feature of its own and is not built.
+- **A smaller step, also not built:** telling the refused buyer how many keys are held by unpaid orders.
+
+## What I built
+
+**Database: `migrations/005_orders.sql`** (62 lines, commented)
+- `orders` with a UUID id, status, total and deadline.
+- `order_items` with copies of the product name, seller and price.
+- `keys.order_item_id`, and a constraint that an available key has no owner and a reserved or sold key always has one.
+
+**Backend: `backend/checkout/`**
+- `cart.go`: checking and pricing a cart.
+- `orders.go`: creating an order, paying, the expiry cleanup, reading orders. The three SQL statements that carry the guarantees are named constants with their reasoning written above them.
+- Five endpoints: `POST /api/cart/price`, `POST /api/orders`, `POST /api/orders/{id}/pay`, `GET /api/orders`, `GET /api/orders/{id}`.
+
+**Frontend**
+- "Add to cart" on each offer, and a count on the cart icon.
+- Cart, checkout, order page and order history.
+- `lib/cart.ts`: the cart as plain functions, with 22 unit tests.
+
+## Changes from the plan
+
+1. **No `reserved_until` column on keys.** The plan had one. The order's deadline is the only source of truth, and a second copy on each key could disagree with it.
+2. **The countdown uses the server's clock.** The first version compared the deadline with the device's clock and showed 15:04 for a 15-minute reservation, because this PC's clock is a few seconds behind the database's. A device an hour off would have shown "expired" at once. The API now sends the seconds left and the page counts down from that.
+3. **The offers table becomes cards on phones.** With the new button column it no longer fit. I saw it in the screenshot.
+4. **Test packages run one at a time (`go test -p 1 ./...`).** The checkout tests add a temporary product, and the catalog tests count products, so running both at once made the catalog tests fail. CI and the README are updated.
+5. **`-reset` in the seed now also deletes orders,** since they point at the catalog being replaced.
+6. **Test 4 is a real race now.** My first version set the deadline in the past, so the payment always lost. It now sets the deadline 300 ms ahead and shifts the payment's timing across 12 rounds. A typical run: 4 ended paid, 8 expired, none mixed.
+
+## What I checked
+
+**Go: all tests pass, one package at a time.**
+- Without a database: 10 cases for checking a cart.
+- With the database:
+  - an order reserves its keys and shows none of them while unpaid;
+  - four ways an order is refused (price changed, unknown offer, one line short of stock, empty cart), after which no key has moved and no order exists;
+  - the limit of 3 unpaid orders;
+  - paying delivers the keys and counts the sale once, and paying again changes nothing;
+  - a declined payment releases the keys and the order stays failed;
+  - a stranger gets "not found" for reading and for paying;
+  - an expired order shows as expired, is cleaned up by the next order, and its key goes to the next buyer;
+  - paying after the deadline is refused.
+- The four concurrency tests.
+- 13 HTTP-level cases: order routes need a session, POSTs need the site's own Origin, pricing a cart is public.
+
+**Frontend:** lint, build and 59 unit tests pass.
+
+**Browser, under the security headers, as the demo account**
+- Added an offer twice: the button reads "In cart (2)" and the header shows 2.
+- Cart: €17.38 for two, €26.07 after changing to three. The cart survives a reload.
+- Checkout while signed out goes to sign-in and comes back to checkout.
+- Placing the order: "Waiting for payment", a countdown, no keys shown. Stock on the product page dropped from 6 to 3 while reserved.
+- Declining: "Payment declined", the cart still holds 3, stock back to 6.
+- Ordering again and paying: "Paid", three keys shown, cart empty, stock 3.
+- The keys are still there after a reload, and the order history lists both orders.
+- Paying the paid order again through the API with "decline": still paid, still 3 keys.
+- A second account gets 404 for reading and paying that order, and sees "Order not found" on its page.
+- Zero policy violations, no sideways scroll on phones.
+- I looked at screenshots of the cart, the pending order, the paid order and the phone product page.
+
+## Not verified
+
+- **The race detector** could not run here: this PC has no C compiler. It is switched on in CI, so the first push runs it.
+- **An order expiring in the browser.** I did not wait 15 minutes. Expiry is covered by the Go tests, and the page's own handling of the countdown reaching zero is untested.
+- **The 3-unpaid-orders limit is soft.** Two orders placed by the same user at the same instant could both pass the count. I noted it in entry 62 and did not fix it.
+- **Nothing on the live site yet.**
+
+## What is left on `dev`
+
+The demo account has 4 orders there from my browser runs (2 paid, 2 declined) and 6 keys are sold. Test accounts and temporary products are deleted. This does not affect production.
+
+## How to try it locally
+
+```
+cd ~/eneba-marketplace
+go test -p 1 ./...                     # about a minute and a half
+go run ./cmd/server                    # restart yours
+cd frontend && npm run dev
+```
+Open a product, add an offer, go to the cart and check out as `demo@keybay.test`.
+
+To see the concurrency tests with their numbers:
+```
+go test -v -run 'Concurrent|Racing' ./backend/checkout/
+```
+
+## Production: your approval
+
+Status check, which changes nothing:
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+pending 005_orders.sql
+```
+With your yes I will run `go run ./cmd/migrate -env .env.production`. It creates two tables and adds one column and one constraint to `keys`. Every existing key is `available` with no owner, which satisfies the new constraint. No seed step.
+
+Then I will ask before pushing. 8 local commits are waiting. After the push I will buy something on the live site with the demo account and check the keys arrive.
