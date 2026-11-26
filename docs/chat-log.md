@@ -1506,3 +1506,95 @@ The whole run took under two minutes.
 - Phases 1 and 2 are done. Next is phase 3, the homepage: a layout endpoint and five blocks (banner, best sellers, deals, new releases, platforms), each with its own endpoint and data source. It needs migration `002_home.sql`, so the same order applies: `dev` first, your approval, production, then the push.
 
 Tell me when to start phase 3. I will read the plan's homepage section again and tell you what I intend before building.
+
+### Prompt 13
+
+````text
+I looked at the store and a product page, looks good. Let's start phase 3.
+
+Tell me the plan first like last time: what each homepage block shows, where its data comes from, and any decisions you're making for me. Read the skills you need before you start. Same order as before, dev first, then ask me before production and before pushing.
+````
+
+### Reply 18
+
+Here is the plan for phase 3. Nothing is built yet.
+
+**Skills read for this phase:** the Go skills (database, code style, error handling, testing) and neon-postgres from before still apply, and I re-read the homepage section of `PLAN.md`. I also queried the UI skill for banner and loading guidance. Its banner query returned no match, so the "no auto-rotating banner" choice below is my own judgment, not something from that skill. Its loading guidance did match: reserve space for content that arrives later so the page does not jump. I will follow that with fixed-height placeholders per block.
+
+## How the homepage is assembled
+
+1. The page asks `GET /api/home`. The answer is an ordered list read from a `home_layout` table, for example: banner, deals, best sellers, new releases, platforms. Each entry has a type, a title, an optional "See all" link and the endpoint to call.
+2. The frontend has a map from block type to component. It renders the list in the order it received and each block fetches its own endpoint.
+3. Each block has its own loading placeholder and fails on its own. If the deals endpoint is down, the other four still render.
+
+Reordering, renaming or switching off a block is one `UPDATE` in the database, with no deploy. A type the frontend does not know is skipped.
+
+## The five blocks
+
+| Block | What the visitor sees | Where the data comes from |
+|---|---|---|
+| Banner | One large promo panel and two smaller ones beside it, each with a headline, a line of text and a button | `banners` table: text, link, two gradient colors, position, active flag |
+| Deals | A row of cards with a "-30%" badge, the old price struck through, the new price, and "Ends in 3d 4h" | `deals` table: an offer, its old price, start and end time. Only deals inside their time window, on offers that have stock |
+| Best sellers | A row of cards ranked 1 to 6 | `product_sales` table: units sold per product |
+| New releases | A row of the latest games, one card per game | `products`, newest release date first |
+| Platforms | One tile per platform with its product count, linking to the filtered store | `products`, counted per platform |
+
+On the backend each block is one Go file in `backend/home/` with its own query, plus `layout.go`. The handlers in `httpapi` stay thin, as in phase 2.
+
+## Database: migration `002_home.sql`
+
+- `home_layout`: position, block type, title, "see all" link, enabled.
+- `banners`, `deals`, `product_sales`: as in the table above.
+- `products.title`: a new column, explained below.
+
+The seed command changes from "all or nothing" to "fill whatever is empty": the catalog if there are no products, the homepage content if there are no banners. Production already has the catalog, so it will only get the new homepage rows. `-reset` still wipes and refills everything.
+
+## Decisions I am making for you
+
+Say so if you disagree with any of these.
+
+**1. Best sellers gets its own table now, not the orders table.**
+The plan said best sellers would be summed from paid orders. Orders do not exist until phase 6. So the block gets a `product_sales` table with units sold per product, seeded with an invented history. In phase 6, marking an order paid will add to it in the same transaction. The block's query stays a simple read either way.
+
+**2. A deal really lowers the price.**
+The seed picks 8 in-stock offers, records each one's current price in `deals` as the old price, and lowers the offer's actual price by 15 to 40 percent. So the deal price is the price everywhere: on the store card, the product page and later at checkout. There is no second price calculation to keep in sync.
+- Limitation: when a deal ends, the block stops showing it but the price does not go back up on its own. I will list that in the README.
+
+**3. Deals end on real dates, spread over the next 60 days.**
+A deal with a countdown has to expire. If all of them ended next week, the block would be empty by your interview. The seed staggers the end dates from about 5 to 60 days out. After that the block would be empty until deals are added again, and the page handles an empty block by leaving it out.
+
+**4. A `title` column on products, so "New releases" shows one card per game.**
+A product is one edition (game, platform, region). Sorted by release date, the first cards would be the same game three times. With a `title` column ("Thunder Circuit Kart") the block can show each game once, picking its cheapest edition. The migration fills the column for existing rows. It also replaces a string-cutting trick in the cover code, and phase 4's search will use it.
+
+**5. The banner is a static layout, not a rotating carousel.**
+Auto-rotating banners move while people read and need pause controls to be accessible. One large and two small panels show three promotions at once with no script.
+
+**6. Banners are gradients and text, no image files.**
+Same reasoning as the covers: no assets to license or host. Colors come from the table.
+
+**7. Homepage responses are cached at Vercel's edge for 60 seconds.**
+The homepage makes six API calls. A short cache means most visitors get them without waking the function or the database. The cost is that a change to the homepage tables takes up to a minute to show.
+
+**8. The "System status" panel leaves the homepage.**
+It was the phase 1 placeholder. `/api/health` stays for checking the deployment.
+
+## Tests
+
+- Without a database: turning layout rows into the response (order, disabled blocks left out, unknown types left out), and the countdown text.
+- With the `dev` database: each block's rule. Deals are all inside their window and in stock, with the new price below the old one. Best sellers are in falling order of units sold. New releases have no game twice and are newest first. Platform counts add up to the product total.
+- In the browser, headless as before: all five blocks render in the order the API gives, no policy violations under the security headers, and with one block's endpoint blocked the other four still appear.
+- CI needs no change. Its migrate and seed steps will pick up the new files.
+
+## What I will not build in this phase
+
+- No admin screen for the homepage. Content is edited in the database.
+- No personalised blocks ("Recommended for you"), which need accounts and history.
+
+## Order of work
+
+1. Build, then migrate and seed `dev`, run the tests and check the page locally.
+2. Show you the summary and the migration SQL.
+3. Show the production status output and ask before running migrate and seed there.
+4. Ask before pushing. The waiting chat log commits go out with that push.
+
+Tell me if this is ok, or which of the eight decisions you want changed.
