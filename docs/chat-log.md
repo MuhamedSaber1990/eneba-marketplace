@@ -1693,3 +1693,74 @@ go run ./cmd/seed -env .env.production
 - The seed will skip the catalog and add the homepage rows. **It lowers the price of 8 offers on the live store**, because that is how deals work here. Those are the only existing rows it changes.
 
 I will show you the counts afterwards and ask again before pushing. There are 8 local commits waiting.
+
+### Prompt 15
+
+````text
+Good work, and thanks for the correction about the style prop.
+
+One fix before production: best sellers shouldn't show the same game twice. Do it like new releases, one card per game, using the edition that sold the most. Update the test and DECISIONS.md.
+
+After that, yes, run migrate and seed on production. I know the seed lowers 8 offer prices there. Show me the counts and ask me before pushing.
+````
+
+### Reply 20
+
+The best sellers fix is in, and migrate and seed have run on production without errors. Nothing is pushed yet.
+
+## Best sellers: one card per game
+
+- **The query** now works in two steps: keep one edition per title, the one that sold the most among those in stock, then rank those. It uses the same `DISTINCT ON (title)` approach as New releases.
+- **Result on `dev`:** Quiet Harbor, Thunder Circuit Kart, Obsidian Vow, Rogue Meridian, Mythforge Legends, Saltwind Pirates. Six different games. Before, Quiet Harbor took places 1 and 4.
+- **Tests:** the existing test now also fails if a title appears twice. A new test reads the sales table directly and checks that the edition shown for each game really is its best-selling one.
+- **DECISIONS.md:** entry 33 has a new paragraph on why and how, and how the rule differs from New releases (most sold here, cheapest there).
+- All Go tests pass. This is one local commit.
+
+## Production
+
+```
+go run ./cmd/migrate -env .env.production
+  database: ep-restless-union-bhfufpzq (from .env.production)
+  applied 002_home.sql
+
+go run ./cmd/seed -env .env.production
+  database: ep-restless-union-bhfufpzq (from .env.production)
+  catalog: already there (56 rows in products), left alone
+  homepage: seeded 5 layout blocks, 3 banners, 56 sales rows, 8 deals
+```
+A status check afterwards reports nothing pending.
+
+## The counts
+
+Counted with a separate read-only query on both databases, as last time:
+
+| | Production (`main`) | `dev` |
+|---|---|---|
+| Products / sellers / offers / keys | 56 / 8 / 173 / 1,247 | 56 / 8 / 173 / 1,247 |
+| Distinct game titles | 24 | 24 |
+| Products without a title | 0 | 0 |
+| Layout blocks | 5 | 5 |
+| Banners | 3 | 3 |
+| Sales rows | 56 | 56 |
+| Deals, and how many are active now | 8, all 8 | 8, all 8 |
+| Deal prices, old total to new total | €243.62 to €187.92 | €243.62 to €187.92 |
+| Migrations recorded | 2 | 2 |
+
+- **The catalog was not touched** apart from the 8 deal offers: product, seller, offer and key counts are what they were.
+- **The title column is filled for every product**, 24 games across 56 editions.
+- **The same 8 offers were discounted on both databases, to the same prices.** A checksum over every offer's id and price matches, and so does one over the sales figures.
+- **One expected difference:** the deals end between 2 December and 27 January on production, and 26 January on `dev`. End dates count from the moment of seeding, and production was seeded later.
+
+The counting script was temporary and is deleted. The repository has no uncommitted changes.
+
+## The live site right now
+
+It still runs the phase 2 code. The store works and already shows the 8 lowered prices. `/api/home` returns 404 until the new code is deployed, so the homepage still shows the old status panel.
+
+## May I push?
+
+10 local commits are waiting. The push will:
+1. deploy the new homepage and the cover fix;
+2. run CI, including the new frontend test step for the first time.
+
+Afterwards I will check on the live URL: the five blocks and their order, covers and fonts, the security headers and policy violations, the phone layout with a screenshot, and whether repeat requests to the homepage endpoints are answered from Vercel's edge cache. I will report the CI result per job.
