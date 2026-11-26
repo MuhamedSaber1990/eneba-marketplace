@@ -460,6 +460,15 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   there is anything else, so `%` and `_`, which are wildcards in a `LIKE`
   pattern, never get there. A search for "%" is a search with no words and
   finds nothing.
+- **Ranking (the order of results), best first:** the name starts with the
+  whole text; the name contains it; the name contains every word; a word
+  matched only by similarity. Inside each group, products that can be bought
+  come before sold-out ones, then the closer match, then units sold.
+- **In stock before sold out was added after release.** On the live site
+  "witchlite" listed a sold-out edition first, because inside a group the
+  order went straight to units sold. A shopper wants what they can buy, so
+  stock now comes first within each group. It does not cross groups: an exact
+  match that is sold out still ranks above a typo match that is in stock.
 
 ## 44. Similarity threshold 0.45, and no typo matching under 4 letters
 

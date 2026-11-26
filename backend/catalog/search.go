@@ -96,8 +96,10 @@ const searchFilter = `
 //	group 2: every word is contained in the name, in any order
 //	group 3: at least one word matched only by similarity (a typo)
 //
-// Inside a group: the closer the whole text is to the name, the higher; then
-// the product that sold more; then slug, so the order is always the same.
+// Inside a group: products that can be bought come before sold-out ones (a
+// sold-out product has no price, so from_price_cents is NULL); then the
+// closer the whole text is to the name, the higher; then the product that
+// sold more; then slug, so the order is always the same.
 const relevanceOrder = `
        CASE
          WHEN name ILIKE $9::text || '%' THEN 0
@@ -106,6 +108,7 @@ const relevanceOrder = `
                            WHERE name NOT ILIKE '%' || word || '%') THEN 2
          ELSE 3
        END,
+       (from_price_cents IS NULL),
        word_similarity($9::text, name) DESC,
        COALESCE((SELECT units_sold FROM product_sales sales
                   WHERE sales.product_id = priced.id), 0) DESC,

@@ -155,6 +155,38 @@ func TestSearchRanking(t *testing.T) {
 	}
 }
 
+// Within a group of equally good matches, products that can be bought come
+// before sold-out ones. Each search below puts all its results in one group:
+// a typo (every result matched by similarity), and the start of a name
+// (every result starts with the text).
+func TestSearchRanksInStockFirst(t *testing.T) {
+	store := testStore(t)
+
+	for _, query := range []string{"witchlite", "witchlight"} {
+		t.Run(query, func(t *testing.T) {
+			items := listAll(t, store, ListParams{Query: query, Sort: SortRelevance})
+
+			soldOut, inStock := 0, 0
+			seenSoldOut := false
+			for _, p := range items {
+				if p.FromPriceCents == nil {
+					soldOut++
+					seenSoldOut = true
+					continue
+				}
+				inStock++
+				if seenSoldOut {
+					t.Errorf("%s is in stock but ranked below a sold-out product", p.Slug)
+				}
+			}
+			// The test only proves something if both kinds are present.
+			if soldOut == 0 || inStock == 0 {
+				t.Fatalf("need both in-stock and sold-out results for %q, got %d and %d", query, inStock, soldOut)
+			}
+		})
+	}
+}
+
 func TestSearchWithFilters(t *testing.T) {
 	store := testStore(t)
 
