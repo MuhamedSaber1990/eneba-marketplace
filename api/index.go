@@ -29,7 +29,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("database: %v", err)
 		}
-		router = httpapi.NewRouter(pool)
+		// The zero Config is the secure one: Secure cookies with the __Host- prefix.
+		router = httpapi.NewRouter(pool, httpapi.Config{})
 	})
 	router.ServeHTTP(w, r)
 }

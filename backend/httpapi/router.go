@@ -6,16 +6,27 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"eneba-marketplace/backend/auth"
 	"eneba-marketplace/backend/catalog"
 	"eneba-marketplace/backend/home"
 )
+
+// Config holds the settings that differ between where the API runs.
+type Config struct {
+	// InsecureCookies drops the Secure flag and the __Host- prefix from the
+	// session cookie. It exists for plain http://localhost and must stay
+	// false anywhere real.
+	InsecureCookies bool
+}
 
 // API carries what the handlers need. Handlers are methods on it, so they can
 // reach the database without global variables.
 type API struct {
 	db      *pgxpool.Pool
+	config  Config
 	catalog *catalog.Store
 	home    *home.Store
+	auth    *auth.Store
 }
 
 // NewRouter returns the handler for every /api route. The same router is used
@@ -23,8 +34,14 @@ type API struct {
 //
 // db may be nil when DATABASE_URL is missing. The health check reports that,
 // and every other route answers 503 instead of crashing.
-func NewRouter(db *pgxpool.Pool) http.Handler {
-	api := &API{db: db, catalog: catalog.NewStore(db), home: home.NewStore(db)}
+func NewRouter(db *pgxpool.Pool, config Config) http.Handler {
+	api := &API{
+		db:      db,
+		config:  config,
+		catalog: catalog.NewStore(db),
+		home:    home.NewStore(db),
+		auth:    auth.NewStore(db),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", api.handleHealth)
@@ -42,6 +59,14 @@ func NewRouter(db *pgxpool.Pool) http.Handler {
 	mux.HandleFunc("GET /api/home/best-sellers", api.needsDB(api.handleHomeBestSellers))
 	mux.HandleFunc("GET /api/home/new-releases", api.needsDB(api.handleHomeNewReleases))
 	mux.HandleFunc("GET /api/home/platforms", api.needsDB(api.handleHomePlatforms))
+
+	// Accounts. The three POST routes change something, so each one is
+	// wrapped in sameOrigin. Middleware reads from the outside in: check
+	// the database is there, then check the origin, then run the handler.
+	mux.HandleFunc("POST /api/auth/signup", api.needsDB(sameOrigin(api.handleSignUp)))
+	mux.HandleFunc("POST /api/auth/signin", api.needsDB(sameOrigin(api.handleSignIn)))
+	mux.HandleFunc("POST /api/auth/signout", api.needsDB(sameOrigin(api.handleSignOut)))
+	mux.HandleFunc("GET /api/auth/me", api.needsDB(api.requireUser(api.handleMe)))
 
 	// Anything else under /api is an unknown route. Answer in JSON, not with
 	// Go's plain-text 404, so the frontend can parse every response.

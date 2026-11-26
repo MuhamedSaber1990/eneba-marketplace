@@ -3,6 +3,7 @@
 //
 //   - the catalog: products, sellers, offers and keys
 //   - the homepage: layout, banners, sales figures and deals
+//   - the demo account, whose password is published in the README
 //
 // So it is safe to run again after a new section is added: what is already
 // there is left alone. Each section uses fixed random seeds, so every
@@ -66,27 +67,32 @@ func seed(ctx context.Context, conn *pgx.Conn, reset bool) error {
 		if err != nil {
 			return fmt.Errorf("emptying the seed tables: %w", err)
 		}
+		// Only the demo account is seed data. Accounts that people created
+		// are theirs, and a reset never touches them.
+		if _, err := tx.Exec(ctx, "DELETE FROM users WHERE is_demo"); err != nil {
+			return fmt.Errorf("deleting the demo account: %w", err)
+		}
 		fmt.Println("reset: emptied the seed tables")
 	}
 
-	// Each section: skip it if its marker table already has rows.
+	// Each section has a query that counts what it would create. If the
+	// count is above zero the section is already there and is skipped.
 	sections := []struct {
-		name        string
-		markerTable string
-		fill        func(context.Context, pgx.Tx) error
+		name     string
+		countSQL string
+		fill     func(context.Context, pgx.Tx) error
 	}{
-		{"catalog", "products", seedCatalog},
-		{"homepage", "banners", seedHome},
+		{"catalog", "SELECT COUNT(*) FROM products", seedCatalog},
+		{"homepage", "SELECT COUNT(*) FROM banners", seedHome},
+		{"demo account", "SELECT COUNT(*) FROM users WHERE is_demo", seedDemoUser},
 	}
 	for _, section := range sections {
 		var existing int
-		// The table name comes from the list above, never from input.
-		err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM "+section.markerTable).Scan(&existing)
-		if err != nil {
-			return fmt.Errorf("counting %s: %w", section.markerTable, err)
+		if err := tx.QueryRow(ctx, section.countSQL).Scan(&existing); err != nil {
+			return fmt.Errorf("checking the %s: %w", section.name, err)
 		}
 		if existing > 0 {
-			fmt.Printf("%s: already there (%d rows in %s), left alone\n", section.name, existing, section.markerTable)
+			fmt.Printf("%s: already there, left alone\n", section.name)
 			continue
 		}
 		if err := section.fill(ctx, tx); err != nil {

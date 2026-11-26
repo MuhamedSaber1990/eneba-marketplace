@@ -33,8 +33,11 @@ func main() {
 	// client could hold a connection open forever. An http.Server lets us
 	// set them.
 	server := &http.Server{
-		Addr:    ":" + port,
-		Handler: httpapi.NewRouter(pool),
+		Addr: ":" + port,
+		Handler: httpapi.NewRouter(pool, httpapi.Config{
+			// Set INSECURE_COOKIES=1 in .env for plain http://localhost.
+			InsecureCookies: os.Getenv("INSECURE_COOKIES") == "1",
+		}),
 
 		ReadHeaderTimeout: 5 * time.Second,  // time to send the request line and headers
 		ReadTimeout:       10 * time.Second, // time to send the whole request

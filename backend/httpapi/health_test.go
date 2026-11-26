@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// These tests run without a database: NewRouter(nil) is the "DATABASE_URL is
+// These tests run without a database: NewRouter(nil, Config{}) is the "DATABASE_URL is
 // missing" case.
 
 func TestHealthWithoutDatabase(t *testing.T) {
-	router := NewRouter(nil)
+	router := NewRouter(nil, Config{})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	response := httptest.NewRecorder()
@@ -30,7 +30,7 @@ func TestHealthWithoutDatabase(t *testing.T) {
 }
 
 func TestUnknownRouteReturnsJSON404(t *testing.T) {
-	router := NewRouter(nil)
+	router := NewRouter(nil, Config{})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/does-not-exist", nil)
 	response := httptest.NewRecorder()
