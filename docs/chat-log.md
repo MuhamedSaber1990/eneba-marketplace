@@ -1176,3 +1176,116 @@ go run ./cmd/seed -env .env.production
 Both print the database they connect to before changing anything. Neither deletes data: the migration only creates tables, and the seed refuses to run if products already exist.
 
 **2. Push.** After that succeeds I will ask again before pushing. The push deploys the store to production. There are 7 local commits waiting.
+
+### Prompt 9
+
+````text
+Before the next phase I want two small things added. Tell me the plan first, then wait for my ok.
+
+1. CI. Right now nothing checks the code before Vercel deploys it. Add a GitHub Actions workflow that runs on every push and pull request: go vet, govulncheck, the Go tests, then npm ci, lint and build for the frontend. The database tests need a connection string, so tell me how you want to handle that (a GitHub secret for the dev branch, or skip them in CI) and I'll decide.
+
+2. Security headers. The live site sends none besides HSTS. Add the usual ones in vercel.json (Content-Security-Policy, X-Content-Type-Options, X-Frame-Options, Referrer-Policy) and check the site still works with them, including the fonts and the cover images.
+
+Also give the local server sensible timeouts instead of plain ListenAndServe.
+
+You can install what you need for this. Name each tool and why, like always. Keep it small, explain what each part does, and add it to DECISIONS.md.
+````
+
+### Reply 14
+
+Here is the plan. Nothing is changed yet. First, one thing about order, because it affects all of this.
+
+## Where things stand
+
+Phase 2 is still only local: 7 commits are unpushed and the production database has no tables yet. I checked the live site: `/api/products` returns 404 and the only security header is HSTS, as you said. Whatever I add now gets pushed together with phase 2, so the production migrate and seed still have to happen before any push. Otherwise the store goes live without its tables.
+
+## 1. CI
+
+One file, `.github/workflows/ci.yml`, running on every push and pull request, with two jobs side by side.
+
+**Backend job**
+- `gofmt -l .` fails if any file is not formatted.
+- `go vet ./...` catches suspicious code the compiler accepts.
+- `govulncheck ./...` checks our dependencies against Go's vulnerability database and reports only the flaws our code can reach.
+- `go test ./...`.
+
+**Frontend job**
+- `npm ci` installs exactly what `package-lock.json` says.
+- `npm run lint`, then `npm run build` (which also type-checks).
+
+**Details**
+- The Go version comes from `go.mod` and Node is set to 24, the same as on this PC.
+- The workflow gets read-only access to the repository and no secrets.
+- A newer push to the same branch cancels the older run.
+
+### Your decision: the database tests
+
+You offered two options. I'd like to add a third, and it is the one I recommend.
+
+1. **A throwaway Postgres inside the CI job (recommended).** GitHub starts a `postgres` container next to the tests. The job runs `cmd/migrate`, then `cmd/seed`, then the tests against it.
+   - No secret is stored anywhere.
+   - Every push proves the migrations and the seed work on an empty database, which nothing checks today.
+   - It does not depend on Neon being awake or on what happens to be in `dev`.
+   - Cost: about 15 more lines in the workflow, and CI tests plain Postgres rather than Neon's pooler. The pooler path stays covered by local runs.
+2. **A GitHub secret with the `dev` string.** The tests run against Neon. The downsides: `dev` probably shares its password with production, so a leaked secret would reach both, and a test run fails whenever `dev` has been reset or is slow to wake.
+3. **Skip them in CI.** The tests skip themselves when no database is set. Simplest, but CI would then cover only request parsing and cover drawing, not the SQL.
+
+### Your decision: does CI block a deploy?
+
+It will not, as you asked for it. Vercel builds every push to `main` on its own and does not wait for GitHub Actions. A red CI run would show a failed check on the commit, but the site would still deploy.
+
+- **Signal only (recommended for now).** Small, and enough for one developer who reads the result. I will say so plainly in `DECISIONS.md`.
+- **A real gate.** Turn off Vercel's automatic deploys and let the workflow deploy after the checks pass. That needs a Vercel token stored as a GitHub secret and about 15 more lines. It is the right setup for a team, and I can add it if you want it.
+
+## 2. Security headers
+
+A `headers` block in `vercel.json` applied to every path:
+
+| Header | Value | What it does |
+|---|---|---|
+| Content-Security-Policy | see below | The browser refuses anything not on the list |
+| X-Content-Type-Options | `nosniff` | The browser trusts the declared file type and does not guess |
+| X-Frame-Options | `DENY` | The site cannot be shown inside another site's frame |
+| Referrer-Policy | `strict-origin-when-cross-origin` | Other sites see only our domain, not the full page address |
+
+**The policy, strict because the app allows it:**
+```
+default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
+font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';
+form-action 'self'; frame-ancestors 'none'
+```
+Everything the site loads comes from its own domain: the script, the stylesheet, the Metropolis font files (bundled by `@fontsource`) and the covers (`/api/products/.../cover.svg`). So no outside domain needs to be listed.
+
+**One code change it forces.** `PlaceholderPage.tsx` uses inline `style={...}` attributes, which `style-src 'self'` blocks. I will move those two styles into a CSS class instead of weakening the policy with `'unsafe-inline'`.
+
+**How I will check it before it is live.** The headers only exist on Vercel, so the local dev server would not show a problem. I will make `npm run preview` (Vite's "serve the built site" mode) send the same headers, read from `vercel.json` so there is one copy of them, and forward `/api` to the Go server. Then in the browser I check: no policy violations in the console, all four font weights load, covers render on the store and product pages, filters and paging still work. After the push I repeat the check on the live URL with `curl -I` and the browser.
+
+**Looking ahead.** Stripe's hosted Checkout in phase 7 is a full-page redirect, which this policy allows. If we ever embedded Stripe's card form instead, the policy would need Stripe's domains added.
+
+## 3. Server timeouts
+
+In `cmd/server/main.go`, replace `http.ListenAndServe` with an `http.Server` that sets four limits:
+
+- `ReadHeaderTimeout` 5s and `ReadTimeout` 10s: a client that sends its request very slowly is cut off instead of holding a connection open forever.
+- `WriteTimeout` 30s: a response cannot hang indefinitely.
+- `IdleTimeout` 60s: unused keep-alive connections are closed.
+
+This only affects local runs and a possible Render deployment. On Vercel the platform sets its own limits.
+
+## Tools I would install
+
+- **govulncheck** (`go install golang.org/x/vuln/cmd/govulncheck@latest`), from the Go team. To run the same check locally before pushing, so CI is not the first place it fails.
+- **actionlint**, a single binary that checks workflow files for mistakes. I cannot run GitHub Actions on this PC, so this catches errors in the YAML before a push.
+
+Neither becomes a dependency of the project. No new Go or npm packages.
+
+## What gets written down
+
+Three new entries in `DECISIONS.md`: CI and how the database tests run, the security headers with the reason for each policy line, and the server timeouts. Plus a short "Checks" section in the README.
+
+## What I need from you
+
+1. Database tests in CI: container (my recommendation), secret, or skip.
+2. CI as a signal only (my recommendation), or a real gate on deploys.
+3. Ok to build this. I will commit locally and not push.
+4. Still open from before: your yes for the production migrate and seed, which must come before the push.
