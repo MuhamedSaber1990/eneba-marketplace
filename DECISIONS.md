@@ -150,3 +150,90 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   function from `api/index.go` with the packages in `backend/`, and the
   `/api/(.*)` rewrite passes the original path to the router, so
   `/api/health` and the JSON 404 both work.
+
+## 19. Our own migration runner
+
+- **Alternatives:** golang-migrate, Atlas, Flyway.
+- **Why:** `cmd/migrate` is about 100 lines of standard library plus pgx. It
+  applies the `.sql` files in name order, each in a transaction, and records
+  them in `schema_migrations`. I can explain every line, which I could not
+  say of a tool's internals. What it lacks: rollbacks ("down" files) and a
+  lock against two people migrating at once. With one developer neither has
+  come up; on a team I would switch to golang-migrate.
+
+## 20. Two connection strings: pooled for the API, direct for schema changes
+
+- **Alternatives:** one pooled string for everything.
+- **Why:** Neon's pooler (PgBouncer) hands a server connection to another
+  client between transactions, which can break migrations and anything that
+  relies on session state. So the API reads `DATABASE_URL` (pooled, right for
+  many short serverless connections) and `cmd/migrate` and `cmd/seed` read
+  `DATABASE_URL_UNPOOLED` (direct). Both commands refuse to run against a
+  host whose name contains `-pooler`, and print which database they are
+  about to change.
+
+## 21. Production schema changes follow a fixed order
+
+- **Alternatives:** migrating automatically on deploy.
+- **Why:** each migration is applied to the `dev` branch first (a copy of
+  production), tested, then applied to production by hand with
+  `-env .env.production`, and only then is the code that needs it pushed. A
+  deploy that runs before its tables exist would break the live site, and an
+  automatic migration on a serverless function has no single moment to run.
+
+## 22. One fixed SQL statement for the store filters
+
+- **Alternatives:** a query builder that adds a `WHERE` line per active
+  filter; a query-builder library.
+- **Why:** every filter is always in the query as
+  `($1 is empty OR column matches $1)`. An unused filter is passed as an empty
+  array, an empty string or NULL and lets every row through. The SQL text
+  never changes, so there are no placeholder numbers to track and nothing a
+  visitor types can become part of the statement. Only `ORDER BY` varies, and
+  it is picked from a fixed map of four clauses. The listing runs two queries
+  (count, then the page) so a page past the end still reports the total.
+
+## 23. A product's price is its cheapest offer that has stock
+
+- **Alternatives:** the cheapest offer regardless of stock; an average.
+- **Why:** it is the price a buyer can pay right now, so it is what the card
+  shows ("From"), what the price filter compares and what price sorting uses.
+  A product with no stock has no price: it shows "Sold out", is left out when
+  a price range is set, and sorts last.
+
+## 24. Covers are drawn by an endpoint from two stored colors
+
+- **Alternatives:** a `cover_svg` column with the whole image (the first
+  plan); image files in the repository.
+- **Why:** `GET /api/products/{slug}/cover.svg` builds the SVG from the
+  product's name, platform and two colors. Embedding the SVG in the listing
+  JSON would have made every page of results several times larger. As an
+  image URL the browser and the CDN cache it for a day. Text from the
+  database is escaped before it goes into the SVG.
+
+## 25. Store filters live in the URL
+
+- **Alternatives:** React state; a state library.
+- **Why:** `/store?platform=Steam&sort=price_asc&page=2` can be shared,
+  bookmarked and reloaded, and the back button undoes a filter. The page reads
+  everything from `useSearchParams` and the same query string is passed to
+  the API, which uses the same parameter names.
+
+## 26. A 40-line `useAsync` hook instead of a data-fetching library
+
+- **Alternatives:** TanStack Query, SWR; repeating `useEffect` in each page.
+- **Why:** four components load data the same way: loading, ready or error,
+  and cancel the request if the input changes. The hook covers that and
+  nothing else (no cache, no retries). It stores each result with the key it
+  was loaded for, so a slow old response cannot replace a newer one.
+
+## 27. Database tests check properties against the seeded dev database
+
+- **Alternatives:** mocking the database; a throwaway Postgres in Docker;
+  asserting exact product names.
+- **Why:** the logic worth testing here is the SQL, and a mock would not run
+  it. There is no Docker on this machine, and Neon's `dev` branch is free.
+  Tests assert rules that hold for any data ("every result is a Steam
+  product", "prices never go down", "no product on two pages") by comparing
+  the query's answer with the same filter applied in Go. They skip themselves
+  when `DATABASE_URL` is not set.

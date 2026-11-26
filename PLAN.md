@@ -128,7 +128,7 @@ users(id, email UNIQUE, password_hash, created_at)
 sessions(token_hash PK, user_id, expires_at)
 
 products(id, slug UNIQUE, name, description, platform, region, genre,
-         cover_svg, release_date, created_at)
+         release_date, cover_color_a, cover_color_b, created_at)
 sellers(id, name, rating, sales_count)
 offers(id, product_id, seller_id, price_cents, UNIQUE(product_id, seller_id))
 keys(id, offer_id, code, status [available|reserved|sold],
@@ -157,6 +157,7 @@ plus the foreign keys used in listings.
 | GET `/api/products` | | store listing: `q, platform, region, min_price, max_price, sort, page` |
 | GET `/api/products/{slug}` | | product details and its offers |
 | GET `/api/filters` | | available platforms, regions, price range |
+| GET `/api/products/{slug}/cover.svg` | | the generated cover image |
 | GET `/api/search?q=` | | ranked results (same filters as the store) |
 | GET `/api/search/suggest?q=` | | top 6 for the header dropdown |
 | GET `/api/home` | | ordered list of blocks: type, title, endpoint |
