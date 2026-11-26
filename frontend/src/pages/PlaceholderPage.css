@@ -1,0 +1,10 @@
+/* These were inline style attributes. The Content-Security-Policy only
+   allows styles from our own stylesheet, so they live here. */
+.placeholder {
+  padding-top: var(--space-4);
+}
+
+.placeholder__note {
+  margin-bottom: var(--space-3);
+  color: var(--color-text-soft);
+}
