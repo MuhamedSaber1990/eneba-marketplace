@@ -1968,3 +1968,141 @@ I am promising the list as the target. The last two typo rows have two mistakes 
 4. Ask before pushing. Waiting locally now: the screenshots, the cover fix and the chat log.
 
 Tell me if the plan is ok or what to change.
+
+### Prompt 18
+
+````text
+Plan is ok, all five decisions are fine. Build it.
+
+Put the one-endpoint choice in DECISIONS.md since it's different from what PLAN.md said. And keep the pass or fail table for the test list in the summary, including the rows that fail.
+````
+
+### Reply 23
+
+Phase 4 is built and working locally against `dev`. Production is untouched and nothing is pushed.
+
+## The test list: pass or fail
+
+Every row from the plan is a test in `backend/catalog/search_test.go`. Each one checks the exact set of games found, so a pass means nothing missing and nothing extra. **All rows pass. None of the promised searches failed**, including the two-mistake rows I had flagged as likely to fail.
+
+**Partial words**
+| Typed | Found | Result |
+|---|---|---|
+| `thund` | Thunder Circuit Kart | pass |
+| `forge` | Mythforge Legends | pass |
+| `circ` | Circuit Breakers, Thunder Circuit Kart | pass |
+| `harb` | Quiet Harbor | pass |
+| `kart` | Thunder Circuit Kart | pass |
+
+**Typos**
+| Typed | Found | Result |
+|---|---|---|
+| `witchlite` | Witchlight Academy | pass |
+| `circut` | Circuit Breakers, Thunder Circuit Kart | pass |
+| `obsidain` | Obsidian Vow | pass |
+| `starfal odyssey` | Starfall Odyssey | pass |
+| `emberwach` | Emberwatch | pass |
+| `lanternwod` | Lanternwood | pass |
+| `mythforge legnds` | Mythforge Legends | pass |
+| `frostlin raly` | Frostline Rally | pass |
+
+**Several words, case, platform**
+| Typed | Found | Result |
+|---|---|---|
+| `QUIET HARBOR` | Quiet Harbor | pass |
+| `kart xbox` | Thunder Circuit Kart, Xbox edition only | pass |
+| `ashen steam` | nothing (Ashen Crown has no Steam edition in the seed) | pass |
+| `switch` | all 10 Nintendo Switch products and nothing else | pass |
+
+**Should find nothing**
+| Typed | Found | Result |
+|---|---|---|
+| `zzzzqq` | nothing | pass |
+| `%` | nothing | pass |
+| `a` | no suggestions offered | pass |
+| `thunder zzzz` | nothing | pass |
+
+**Known limits: searches that do not work.** These are the real failures of the feature. Each is a test that expects nothing, so if the behavior changes it will be noticed.
+| Typed | Meant | Why it finds nothing |
+|---|---|---|
+| `vwo` | Vow | typo in a 3-letter word; short words must match exactly |
+| `krat` | Kart | swapped letters in a 4-letter word (similarity 0.20) |
+| `rouge` | Rogue | swapped letters in a 5-letter word (0.33). Found while measuring, not in the plan |
+| `glbal` | Global | scores 0.44, just under the threshold. Also found while measuring |
+| `racing` | a racing game | search reads names, not genres |
+
+## What I built
+
+**Database: `migrations/003_search.sql`** (10 lines): `CREATE EXTENSION pg_trgm`. Nothing else.
+
+**Backend**
+- `backend/catalog/search.go`: splitting the text into words, the matching condition and the ranking, with the reasoning in comments.
+- `GET /api/products?q=...` now uses it, with a `relevance` sort that is the default when `q` is present.
+- `GET /api/search/suggest?q=...`: top 6, cached at the edge for 60 seconds.
+
+**Frontend**
+- `SearchBox` in the header: suggestions with cover, name and price, a "See all results" line, keyboard support.
+- `/search?q=...`: the store page with a "Results for ..." heading, "Best match" as the default sort, and on no results a hint plus the best sellers row.
+- `lib/debounce.ts`, about 20 lines, with 4 tests.
+
+## What you asked for
+
+- **DECISIONS.md, entry 42** records the one-endpoint choice: what `PLAN.md` said, what was built and why. `PLAN.md` itself is updated and points to it.
+- Entries 43 to 48 cover the rest: word-by-word matching, the threshold, the index (below), the shared results page, the search box behavior, and a filter panel fix.
+
+## One more change from the plan: no index
+
+The plan said I would create a trigram index and tell you whether PostgreSQL uses it. I did not create one. The query calls `word_similarity(word, name) >= 0.45` as a function inside a per-word check, and PostgreSQL can only use a trigram index for the operator forms written directly against the column. An index this query cannot use would only be dead weight. With 56 rows it makes no difference today. Entry 45 says what a large catalog would need: the condition rewritten with the `<%` operator, the threshold set per transaction, and then the index.
+
+## The threshold
+
+I measured about 45 words against the catalog before choosing. Real typos scored 0.50 or more ("legnds" 0.50, "obsidain" 0.56, "circut" 0.71). Unrelated words scored 0.40 or less ("kart" against "Garage", "tied" against "Tide"). I set it to 0.45, in the gap. That number fits these 24 invented titles and would need measuring again on a real catalog.
+
+## Bugs the browser test caught, all fixed
+
+1. **Enter on a highlighted suggestion went to the results page.** Pressing Enter in a form also activates its submit button, and the "See all" button reset the highlight first. It is now a plain button.
+2. **Escape cleared what you had typed.** That is a search field's default. It now only closes the list.
+3. **Old suggestions stayed under new text for a moment.** The list now shows only when it belongs to what is in the box.
+4. **Ticking a filter rebuilt the whole filter panel and dropped keyboard focus.** This has been there since phase 2. The panel now rebuilds only when a text field's value changes from outside.
+
+## What I checked
+
+- **Go:** all tests pass. New: 24 search cases in the table, 10 for splitting text into words, and tests for ranking, search with filters, the platform word, and suggestions. `go vet` and `govulncheck` are clean.
+- **Frontend:** lint, build and 17 unit tests pass.
+- **Browser, under the security headers:**
+  - Typing "thund" quickly sent exactly one request.
+  - Arrow down, down, up moved the highlight to option 1, 2, 1. Enter opened that product and the box cleared.
+  - Escape closed the list and kept the text.
+  - "circut" then Enter: "Results for “circut”", 4 products, sort "Best match", the box still shows "circut".
+  - A platform filter on the results page kept the search (1 product), and so did "Clear all filters" (back to 4).
+  - Clicking a suggestion opened the product. Clicking elsewhere closed the list.
+  - "zzzzqq": "No products match" in the dropdown and on the page, with 6 best sellers below.
+  - One letter: no request and no list.
+  - Phone: the dropdown fits the screen.
+  - Zero policy violations and zero console errors.
+- I looked at screenshots of the dropdown and the no-results page.
+
+## Not verified
+
+- The suggest endpoint's edge cache, which only Vercel can show.
+- Nothing on the live site yet.
+
+## How to try it locally
+
+```
+cd ~/eneba-marketplace
+go run ./cmd/server                    # restart yours if it is still on the old code
+cd frontend && npm run dev             # http://localhost:5173
+```
+Then type the rows above into the header box.
+
+## Production: your approval
+
+Status check, which changes nothing:
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+pending 003_search.sql
+```
+With your yes I will run `go run ./cmd/migrate -env .env.production`. It installs the `pg_trgm` extension and changes no table and no data. There is no seed step. The migration has to come before the push, because the new code calls a function that only exists once the extension is installed.
+
+After that I will ask before pushing. 8 local commits are waiting, including the cover margin fix and the screenshots.
