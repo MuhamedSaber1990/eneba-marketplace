@@ -197,7 +197,10 @@ Answer: Stripe test mode
 - Everything on Render: One provider for the frontend, API and database. Simpler to set up, but Render's free database is deleted after about a month, which may be before your interview.
 - Something else: You already use another host (Fly.io, Railway, Koyeb...). Tell me which in the notes.
 
-Answer: Vercel for both the React frontend and the Go API, with PostgreSQL on Neon.Write the API as a standard net/http server that listens on the PORT env var,so it can move to Render unchanged if Vercel's Go runtime (beta) causes problems.Use Neon's pooled connection string, since the API will run as serverless functions.
+Answer: Vercel for both the React frontend and the Go API, with PostgreSQL on Neon.
+Write the API as a standard net/http server that listens on the PORT env var,
+so it can move to Render unchanged if Vercel's Go runtime (beta) causes problems.
+Use Neon's pooled connection string, since the API will run as serverless functions.
 
 **Question 4: Which of these accounts do you already have?**
 
@@ -799,3 +802,79 @@ npm run dev                  # site on http://localhost:5173
 3. Neon: create a project and add a `dev` branch next to `main`. Then run `cp ~/eneba-marketplace/.env.example ~/eneba-marketplace/.env` and paste the `dev` branch's pooled connection string as `DATABASE_URL` in `.env`. Keep the `main` branch's pooled string at hand for Vercel.
 
 Tell me when those are done. I will then create the public `eneba-marketplace` repository, push, link the Vercel project, ask you to add the production `DATABASE_URL` there, deploy, and confirm the status panel shows "Database: ok" on the public URL.
+
+### Note: side session (2026-11-26)
+
+The three setup steps listed in Reply 8 were done in a separate Claude Code
+session, not in this conversation. That session's prompts and replies are not
+included in this file.
+
+What was done there:
+- GitHub CLI signed in to my personal account (`MuhamedSaber1990`), over HTTPS.
+- Vercel CLI signed in to my personal account (`muhamedsaber1990`).
+- Neon: project `eneba-marketplace` created in `aws-eu-central-1` with a `dev`
+  branch next to `main`. `.env` was copied from `.env.example` and its
+  `DATABASE_URL` set to the `dev` branch's pooled connection string.
+- Checked with the local API: `GET /api/health` returned
+  `{"status":"ok","database":"ok"}`.
+
+No application code was written or changed in the side session.
+
+### Prompt 4
+
+````text
+The three steps are done. I did them in a side session.
+
+1. GitHub: gh is signed in to my personal account (MuhamedSaber1990), HTTPS.
+2. Vercel: the CLI is signed in to my personal account (muhamedsaber1990).
+3. Neon: project "eneba-marketplace" (ID green-smoke-60176318) in aws-eu-central-1, with a "dev" branch next to "main". .env exists and DATABASE_URL points at the dev branch's pooled string. Locally, GET /api/health returned {"status":"ok","database":"ok"}.
+
+The main branch's pooled string is in ~/eneba-marketplace/.env.vercel-production (git-ignored). Use it for the production DATABASE_URL in Vercel and never print its value. Delete that file once the value is set in Vercel.
+
+docs/chat-log.md has an uncommitted "Note: side session" section at the end. Keep it as it is, continue the log after it, and commit it with your next log update.
+
+Go ahead with the rest of phase 1: create the public repository, push, link the Vercel project, deploy, and confirm the status panel shows "Database: ok" on the public URL. Ask me before anything that needs my approval.
+````
+
+### Reply 9
+
+Phase 1 is finished and live.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app
+- **Repository:** https://github.com/MuhamedSaber1990/eneba-marketplace (public)
+
+**What I did**
+- Scanned the tracked files for connection strings and keys before publishing (none found), then created the public repository and pushed `main`.
+- Linked the folder to a new Vercel project, `eneba-marketplace`, under your personal account.
+- Set `DATABASE_URL` for Production in Vercel from `.env.vercel-production`. The value was piped straight into the Vercel CLI and never printed. Vercel lists it as "Encrypted". I then deleted the file, as you asked.
+- Deployed to production. The build took 58 seconds.
+- Added the live URL to the README and one entry to `DECISIONS.md` (18). Your side-session note is in the chat log unchanged, and this turn follows it.
+
+**What I checked on the public URL**
+- `GET /api/health` returns 200 `{"status":"ok","database":"ok"}`, three times in a row, in under a second.
+- `GET /api/nope` returns 404 `{"error":"route not found"}` in JSON.
+- `/` and `/store` return the app, and the favicon loads.
+- After the final push I waited for the new deployment and ran the health check again: still ok.
+
+This settles the main risk of the phase: Vercel builds the Go function with the packages in `backend/`, and the `/api/*` rewrite hands the original path to the router.
+
+**One thing I could not check**
+- I did not see the status panel rendered in a browser. The automation browser was in use by another session, and I did not want to close it under you. The evidence is indirect: the deployed JavaScript bundle calls `/api/health`, and that endpoint answers `database: ok`. Please open the site once and confirm the panel reads "API reachable, Database ok".
+
+**Things to know**
+- Vercel connected the GitHub repository when I linked the project. From now on every push to `main` deploys to production by itself. If you would rather deploy only by hand, say so and I will disconnect it.
+- The address ends in `-nine`. Vercel adds a suffix like that when the plain name is not free; I did not check who holds `eneba-marketplace.vercel.app`.
+- Only Production has a `DATABASE_URL`. Preview deployments (from other branches) would show "Database: not configured". We work on `main`, so this does not matter yet.
+
+**How to test it yourself**
+```
+curl https://eneba-marketplace-nine.vercel.app/api/health
+cd ~/eneba-marketplace && go test ./... && git status
+```
+
+**Before phase 2, one approval needed**
+Phase 2 creates the tables and seed data, and they must exist in the production database (`main` branch) as well as in `dev`. You had me delete the production string, so I have two ways to run migrations there:
+1. Run `vercel env pull` to fetch the production value into a git-ignored file for the length of the command, then delete it again. I recommend this: nothing to copy by hand.
+2. You run the two commands yourself against production when I tell you.
+
+Tell me which you prefer, and whether to start phase 2: schema, migrations, seed data (about 60 invented products, 8 sellers, offers and keys), then the store page and the product page.

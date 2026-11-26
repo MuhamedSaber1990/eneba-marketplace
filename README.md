@@ -3,6 +3,8 @@
 A take-home assignment for the Eneba internship: a marketplace web app in
 Eneba's style. React and TypeScript frontend, Go API, PostgreSQL.
 
+**Live:** https://eneba-marketplace-nine.vercel.app
+
 This README is a working draft and is completed at the end of the project
 (live URL, test credentials, architecture overview, known limitations).
 

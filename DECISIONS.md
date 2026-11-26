@@ -139,3 +139,14 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **Why:** it is about 20 lines (`backend/config/dotenv.go`) and I can explain
   each one. It only runs in `cmd/server`; on Vercel the variables come from
   the host.
+
+## 18. Pushes to `main` deploy to production
+
+- **Alternatives:** deploying by hand with the Vercel CLI only.
+- **Why:** `vercel link` connected the GitHub repository, so Vercel builds and
+  publishes every push to `main`. That keeps the public URL equal to the
+  repository, which is what a reviewer expects. The first deploy (2026-11-26)
+  confirmed the two things phase 1 was meant to test: Vercel builds the Go
+  function from `api/index.go` with the packages in `backend/`, and the
+  `/api/(.*)` rewrite passes the original path to the router, so
+  `/api/health` and the JSON 404 both work.
