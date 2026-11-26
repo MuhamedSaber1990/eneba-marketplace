@@ -2439,3 +2439,100 @@ go run ./cmd/seed -env .env.production
 - The seed will skip the catalog and the homepage and add one row: the demo account.
 
 Then I will ask before pushing. 8 local commits are waiting, including the in-stock ranking change and the search screenshots.
+
+### Prompt 22
+
+````text
+Good, I like the demo account fix.
+
+Yes, run migrate and seed on production. If both go through cleanly and status shows nothing pending, push too. Then check the three things you couldn't verify on the live site: the real cookie name and flags, that sign-in isn't blocked by the Origin check, and how long a sign-in takes. If sign-in doesn't work live, tell me right away.
+````
+
+### Reply 27
+
+Sign-in works on the live site. Migrate and seed went through cleanly, I pushed, CI passed, and all three things I could not verify before are now confirmed. Phase 5 is live.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app/signin
+- **Demo account:** `demo@keybay.test` / `keybay-demo-2026`
+
+## Production
+
+```
+migrate:  applied 004_auth.sql
+seed:     catalog: already there, left alone
+          homepage: already there, left alone
+          demo account: seeded demo@keybay.test
+status:   nothing to do, the schema is up to date
+```
+A read-only count afterwards: 1 user (the demo account, with a cost-12 bcrypt hash), 0 sessions, 0 attempts. The catalog is unchanged: 56 products, 173 offers, 1,247 keys, 8 deals. 4 migrations recorded.
+
+## CI
+
+Both jobs passed. On the empty container all four migrations applied and the seed created the catalog, the homepage and the demo account. Tests passed for all four Go packages, including the auth tests through the real router, and the frontend's lint, unit tests and build passed.
+
+## The three things I had not verified
+
+### 1. The real cookie name and flags: confirmed
+
+The response header from the live sign-in, token hidden:
+```
+set-cookie: __Host-session=<hidden>; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Lax
+```
+A real browser stored it the same way: name `__Host-session`, HttpOnly, Secure, SameSite Lax, path `/`, this host only, 7 days, a 43-character token. `document.cookie` on the page is empty, so JavaScript cannot see it. The response carries `Cache-Control: no-store`.
+
+### 2. Sign-in is not blocked by the Origin check: confirmed
+
+- Signing in from the site itself returns 200. Vercel passes the public host to the function, so the comparison works as it does locally.
+- The check still refuses what it should:
+  - a request with another site's Origin: 403;
+  - a request with no Origin: 403;
+  - another site's Origin together with a forged forwarded-host header naming that site: 403. Vercel replaces that header, so a client cannot use it to get past the check. I had flagged accepting that header as a possible weak spot, and on Vercel it is not one.
+  - a plain form instead of JSON: 415.
+
+### 3. How long a sign-in takes: about 0.9 seconds
+
+| Request | Time |
+|---|---|
+| Correct sign-in, 5 runs | 0.85 to 0.95 s |
+| Wrong password, known account, 3 runs | 1.04 to 1.20 s |
+| Wrong password, email with no account, 3 runs | 1.12 to 1.21 s |
+| A request with no hashing (`/api/auth/me`), 3 runs | 0.21 to 0.26 s |
+
+- **Is that acceptable?** Roughly 0.7 seconds of it is the sign-in's own work: the bcrypt comparison plus several database round trips. It is noticeable but fine for something done once per session, and the slowness is the point of bcrypt. In the browser, click to account page took 0.8 seconds.
+- **The timing protection works:** a known account and an unknown email take the same time, within the noise of the measurement. Six runs is a small sample, so read that as "no visible difference", not as a proof.
+- These were measured from this PC, so they include my network distance to Vercel.
+
+## The rest of the live check
+
+**The whole flow in a browser, with the demo account**
+- `/account` while signed out goes to `/signin?next=%2Faccount`.
+- A wrong password shows "Wrong email or password."
+- The right one lands on `/account`, with the email in the header.
+- A reload keeps the session, and the homepage still shows its five blocks while signed in.
+- Log out lands on the homepage, the header shows "Log in | Register", and no cookie is left.
+- Zero policy violations and zero unexpected console errors.
+
+**Sign out really ends the session:** after signing out, the old token gets 401 from `/api/auth/me`.
+
+**The in-stock ranking change is live:** "witchlite" now lists the two editions you can buy first and the sold-out Steam GLOBAL edition last.
+
+**Security headers:** all four still sent.
+
+## What my checks left behind on production
+
+- A handful of demo-account sessions from the timing runs. They are valid for 7 days and belong to the public demo account, so they expose nothing. Its expired ones are deleted at its next sign-in.
+- Six failed sign-in rows counted against my own IP address, out of the 30 allowed, and three against made-up emails. They stop counting after 15 minutes and are deleted after a day.
+
+I did not clean these up, because that would be a write to production you had not approved. Say so if you want them removed.
+
+## A screenshot
+
+`docs/screenshots/account.png` shows the account page on the live site, signed in as the demo account.
+
+## State
+
+- GitHub and the live site are at the same commit.
+- Committed locally and not pushed: that screenshot and this chat log entry.
+- Phases 1 to 5 are done. Next is phase 6, the largest: cart, order creation with key reservation, simulated payment, key delivery and order history. It is the third "in depth" feature, and it is where selling the same key twice has to be made impossible.
+
+Tell me when to start phase 6. I will give you the plan first. For that one I would like to spell out the order and key states and what happens at each failure point, so you can check the logic before any code exists.
