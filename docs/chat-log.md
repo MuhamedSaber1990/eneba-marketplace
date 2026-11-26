@@ -1388,3 +1388,66 @@ In the browser's developer tools, the Network tab shows the headers on the page 
 ## State of the repository
 
 13 local commits are waiting, phase 2 plus this work. Waiting for your yes on the production run.
+
+### Prompt 11
+
+````text
+ Checked with Neon: ep-restless-union-bhfufpzq is the main branch and
+  ep-damp-bird-bhgt6sta is dev, so the status output is right.
+
+  Yes, run migrate and then seed on production. Show me the counts
+  afterwards and ask me before pushing.
+````
+
+### Reply 16
+
+Both commands ran on production without errors. Nothing is pushed yet.
+
+## What ran
+
+```
+go run ./cmd/migrate -env .env.production
+  database: ep-restless-union-bhfufpzq (from .env.production)
+  applied 001_catalog.sql
+
+go run ./cmd/seed -env .env.production
+  database: ep-restless-union-bhfufpzq (from .env.production)
+  seeded 56 products, 8 sellers, 173 offers, 1247 keys
+```
+
+A status check afterwards reports "nothing to do, the schema is up to date".
+
+## The counts
+
+I did not rely on what the seed command printed. I counted the rows with a separate read-only query on both databases:
+
+| | Production (`main`) | `dev` |
+|---|---|---|
+| Products | 56 | 56 |
+| Sellers | 8 | 8 |
+| Offers | 173 | 173 |
+| Keys | 1,247 | 1,247 |
+| Keys available | 1,247 | 1,247 |
+| Products fully sold out | 3 | 3 |
+| Offer prices | €8.59 to €67.79 | €8.59 to €67.79 |
+| Migrations recorded | 1 | 1 |
+
+A checksum over all product slugs is also the same on both, so production has the same products as `dev`, not only the same number of them. The counting script was temporary and is deleted; the repository has no uncommitted changes.
+
+## The live site right now
+
+It still runs the phase 1 code, so `/api/products` returns 404 and `/api/health` reports the database as ok. The tables are there, and the code that reads them is in the 14 commits waiting locally.
+
+## May I push?
+
+The push does three things at once:
+1. Vercel deploys phase 2 (store and product pages) and the security headers to production.
+2. GitHub Actions runs the new CI workflow for the first time.
+3. The chat log and docs on GitHub catch up.
+
+After the push I will:
+- wait for the deployment and check the live store, a product page and a cover image;
+- check the four security headers with `curl -I` and repeat the browser test for policy violations on the live URL;
+- watch the first CI run and tell you the result of each job. If the Postgres container step fails, I will fix it and tell you what was wrong.
+
+If the headers break anything on the live site, the fix is a one-line change to `vercel.json` and another push, and I will ask before that one too.
