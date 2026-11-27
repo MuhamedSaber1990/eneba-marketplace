@@ -1,10 +1,13 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getProduct, type Offer, type ProductDetail } from '../api/catalog'
-import { MAX_QUANTITY, quantityInCart } from '../lib/cart'
+import { getProduct, listProducts, type Offer, type ProductDetail } from '../api/catalog'
+import { AddToCartButton } from '../components/AddToCartButton'
+import { ChevronIcon, StarIcon } from '../components/Icons'
+import { ProductCard } from '../components/ProductCard'
 import { formatPrice } from '../lib/money'
+import { sellerMark } from '../lib/sellerMark'
 import { useAsync } from '../lib/useAsync'
-import { useCart } from '../state/cart'
+import '../blocks/blocks.css'
 import './ProductPage.css'
 
 /** One product: its details and every seller's offer, for comparing. */
@@ -47,13 +50,16 @@ function ProductView({ product }: { product: ProductDetail }) {
   // The API sorts offers: in stock first, cheapest first. So the first offer
   // is the best price, if it has stock at all.
   const best = product.offers.find((offer) => offer.stock > 0)
+  const others = product.offers.filter((offer) => offer.id !== best?.id)
 
   return (
     <div className="container product">
       <nav className="product__breadcrumb" aria-label="Breadcrumb">
         <Link to="/store">Store</Link>
-        <span aria-hidden="true">/</span>
+        <ChevronIcon />
         <Link to={`/store?platform=${encodeURIComponent(product.platform)}`}>{product.platform}</Link>
+        <ChevronIcon />
+        <span aria-current="page">{product.name}</span>
       </nav>
 
       <div className="product__top">
@@ -81,12 +87,20 @@ function ProductView({ product }: { product: ProductDetail }) {
           </dl>
         </div>
 
+        {/* The price box holds the page's one yellow button. The buttons in
+            the offer rows below are outlined, so it is clear which is which. */}
         <div className="product__summary">
           {best ? (
             <>
               <p className="product__summary-label">Best price</p>
               <p className="product__summary-price">{formatPrice(best.price_cents)}</p>
               <p className="product__summary-seller">from {best.seller_name}</p>
+              <AddToCartButton
+                offerId={best.id}
+                stock={best.stock}
+                context={` from ${best.seller_name}, the best price`}
+                className="product__summary-button"
+              />
             </>
           ) : (
             <p className="product__summary-price">Sold out</p>
@@ -97,34 +111,33 @@ function ProductView({ product }: { product: ProductDetail }) {
         </div>
       </div>
 
-      <section className="product__section">
-        <h2>Offers</h2>
-        <div className="offers-scroll">
-          <table className="offers">
-            <thead>
-              <tr>
-                <th scope="col">Seller</th>
-                <th scope="col">Rating</th>
-                <th scope="col" className="offers__optional">
-                  Sales
-                </th>
-                <th scope="col">Stock</th>
-                <th scope="col" className="offers__price">
-                  Price
-                </th>
-                <th scope="col">
-                  <span className="visually-hidden">Add to cart</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {product.offers.map((offer) => (
-                <OfferRow key={offer.id} offer={offer} isBest={offer.id === best?.id} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {best && (
+        <section className="product__section">
+          <h2>Best offer</h2>
+          <ul className="offers">
+            <OfferRow offer={best} isBest />
+          </ul>
+        </section>
+      )}
+
+      {others.length > 0 && (
+        <section className="product__section">
+          <h2>
+            {best ? (
+              <>
+                <span className="product__count">{others.length}</span> other {others.length === 1 ? 'offer' : 'offers'}
+              </>
+            ) : (
+              'Offers'
+            )}
+          </h2>
+          <ul className="offers">
+            {others.map((offer) => (
+              <OfferRow key={offer.id} offer={offer} />
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="product__section">
         <h2>Product description</h2>
@@ -132,39 +145,73 @@ function ProductView({ product }: { product: ProductDetail }) {
           <p>{product.description}</p>
         </div>
       </section>
+
+      {/* The key rebuilds the row when the visitor opens another product. */}
+      <MoreOnPlatform key={product.slug} platform={product.platform} currentSlug={product.slug} />
     </div>
   )
 }
 
-function OfferRow({ offer, isBest }: { offer: Offer; isBest: boolean }) {
-  const cart = useCart()
+function OfferRow({ offer, isBest = false }: { offer: Offer; isBest?: boolean }) {
   const soldOut = offer.stock === 0
-  const inCart = quantityInCart(cart.lines, offer.id)
-  // No more can be added once the cart holds the per-order limit, or as many
-  // as the seller has.
-  const atLimit = inCart >= Math.min(MAX_QUANTITY, offer.stock)
+  const mark = sellerMark(offer.seller_name)
+
   return (
-    <tr className={soldOut ? 'offers__row--sold-out' : undefined}>
-      <th scope="row" className="offers__seller">
-        {offer.seller_name}
-        {isBest && <span className="offers__badge">Best price</span>}
-      </th>
-      <td className="offers__rating">
-        <span className="offers__label">Rating </span>
-        {offer.seller_rating.toFixed(1)} / 5
-      </td>
-      <td className="offers__optional">{offer.seller_sales_count.toLocaleString('en')}</td>
-      <td className="offers__stock">{soldOut ? 'Sold out' : `${offer.stock} in stock`}</td>
-      <td className="offers__price">{formatPrice(offer.price_cents)}</td>
-      <td className="offers__action">
+    <li className={soldOut ? 'offer offer--sold-out' : 'offer'}>
+      {/* The mark's color depends on the seller, so it is set here and not
+          in the stylesheet. */}
+      <span className="offer__mark" style={{ backgroundColor: mark.color }} aria-hidden="true">
+        {mark.letter}
+      </span>
+      <div className="offer__seller">
+        <span className="offer__name">
+          {offer.seller_name}
+          {isBest && <span className="offer__badge">Best price</span>}
+        </span>
+        <span className="offer__rating">
+          <StarIcon />
+          <strong>{offer.seller_rating.toFixed(1)} / 5</strong> rating
+          <span className="offer__sales"> · {offer.seller_sales_count.toLocaleString('en')} sales</span>
+        </span>
+      </div>
+      <span className="offer__stock">{soldOut ? 'Sold out' : `${offer.stock} in stock`}</span>
+      <strong className="offer__price">{formatPrice(offer.price_cents)}</strong>
+      <div className="offer__action">
         {!soldOut && (
-          <button className="button" disabled={atLimit} onClick={() => cart.add(offer.id)}>
-            {inCart > 0 ? `In cart (${inCart})` : 'Add to cart'}
-            <span className="visually-hidden"> from {offer.seller_name}</span>
-          </button>
+          <AddToCartButton
+            offerId={offer.id}
+            stock={offer.stock}
+            context={` from ${offer.seller_name}`}
+            variant="secondary"
+          />
         )}
-      </td>
-    </tr>
+      </div>
+    </li>
+  )
+}
+
+/**
+ * One row of other products on the same platform, so the page does not end
+ * at the description. It uses the store's list request with the platform
+ * filter. If the request fails or nothing else is on that platform, the row
+ * is left out: it is an extra, not something to show an error about.
+ */
+function MoreOnPlatform({ platform, currentSlug }: { platform: string; currentSlug: string }) {
+  const list = useAsync((signal) => listProducts(`platform=${encodeURIComponent(platform)}`, signal), platform)
+  if (list.status !== 'ready') return null
+
+  const others = list.data.items.filter((item) => item.slug !== currentSlug).slice(0, 6)
+  if (others.length === 0) return null
+
+  return (
+    <section className="product__section">
+      <h2>More on {platform}</h2>
+      <div className="product-row">
+        {others.map((item) => (
+          <ProductCard key={item.slug} product={item} />
+        ))}
+      </div>
+    </section>
   )
 }
 

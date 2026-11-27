@@ -1,5 +1,6 @@
 .product {
   padding-top: var(--space-3);
+  padding-bottom: var(--space-5);
 }
 
 .product__message {
@@ -9,7 +10,9 @@
 
 .product__breadcrumb {
   display: flex;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
   margin-bottom: var(--space-3);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
@@ -19,16 +22,31 @@
   color: var(--color-text);
 }
 
+.product__breadcrumb a {
+  white-space: nowrap;
+}
+
+.product__breadcrumb svg {
+  flex-shrink: 0;
+}
+
+/* The product's own name, cut with an ellipsis when it does not fit. */
+.product__breadcrumb span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Cover, facts, and a price box on the right. */
 .product__top {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) 300px;
+  grid-template-columns: 224px minmax(0, 1fr) 320px;
   gap: var(--space-4);
   align-items: start;
 }
 
 .product__cover {
-  width: 160px;
+  width: 224px;
   height: auto;
 }
 
@@ -64,7 +82,7 @@
 
 .product__summary {
   padding: var(--space-3);
-  background: var(--color-accent);
+  background: var(--color-side-panel);
 }
 
 .product__summary-label {
@@ -83,9 +101,17 @@
   font-weight: var(--font-semibold);
 }
 
+.product__summary-button {
+  width: 100%;
+  min-height: var(--touch-target);
+  margin-top: var(--space-3);
+}
+
 .product__summary-count {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
+  text-align: center;
+  color: var(--color-text-soft);
 }
 
 .product__section {
@@ -102,61 +128,83 @@
   max-width: 75ch;
 }
 
-/* On a narrow screen the table scrolls inside this box, the page does not. */
-.offers-scroll {
-  overflow-x: auto;
+/* The number in "3 other offers". */
+.product__count {
+  color: var(--color-mint);
 }
 
+/* ---- Offers: one dark row per seller ---- */
+
 .offers {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Mark, seller, stock, price, button. The seller column takes what is left. */
+.offer {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 110px 110px 130px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--color-band);
   font-size: var(--text-sm);
 }
 
-.offers th,
-.offers td {
-  padding: 15px var(--space-3);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.offers thead th {
-  padding-top: 0;
-  padding-bottom: var(--space-1);
-  font-size: var(--text-xs);
+.offer__mark {
+  display: grid;
+  place-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%; /* one of the few round things on the site, as in the reference */
+  color: var(--color-panel);
+  font-size: 1.125rem;
   font-weight: var(--font-heavy);
-  color: var(--color-text-muted);
 }
 
-.offers tbody tr {
-  background: var(--color-panel);
+.offer__seller {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
-.offers tbody th {
+.offer__name {
   font-size: var(--text-base);
   font-weight: var(--font-bold);
 }
 
-.offers .offers__price {
-  text-align: right;
+.offer__rating {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-soft);
 }
 
-.offers td.offers__price {
+.offer__rating svg {
+  color: var(--color-primary);
+}
+
+.offer__rating strong {
+  font-weight: var(--font-heavy);
+}
+
+.offer__price {
+  text-align: right;
   font-size: var(--text-price);
   font-weight: var(--font-heavy);
 }
 
-.offers .offers__action {
-  width: 1%; /* as narrow as its button */
-  text-align: right;
+.offer__action .button {
+  width: 100%;
 }
 
-.offers__action .button {
-  min-width: 110px;
-}
-
-.offers__badge {
+.offer__badge {
   display: inline-block;
   margin-left: var(--space-2);
   padding: 4px 8px;
@@ -167,7 +215,7 @@
   vertical-align: middle;
 }
 
-.offers__row--sold-out {
+.offer--sold-out {
   color: var(--color-text-muted);
 }
 
@@ -194,82 +242,43 @@
   }
 }
 
-/* "Rating" is in the column heading on wide screens. On phones the heading
-   row is hidden, so the word appears next to the number. */
-.offers__label {
-  display: none;
-}
-
-@media (max-width: 600px) {
-  /* A five-column table does not fit a phone. Each offer becomes a card:
-     seller on top, rating and stock under it, then price and button. The
-     markup stays a table, so a screen reader still reads it as one. */
-  .offers thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-
-  .offers,
-  .offers tbody {
-    display: block;
-  }
-
-  .offers tbody tr {
-    display: grid;
-    grid-template-columns: 1fr auto;
+@media (max-width: 700px) {
+  /* Five columns do not fit a phone. The mark and the seller stay on the
+     first line, stock and price share the second, the button gets the third. */
+  .offer {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
     grid-template-areas:
-      'seller seller'
-      'rating stock'
-      'price action';
-    gap: var(--space-1) var(--space-3);
-    align-items: center;
-    margin-bottom: var(--space-1);
-    padding: var(--space-3);
+      'mark seller seller'
+      'stock stock price'
+      'action action action';
+    gap: var(--space-2) var(--space-3);
   }
 
-  .offers th,
-  .offers td {
-    padding: 0;
-    white-space: normal;
+  .offer__mark {
+    grid-area: mark;
   }
 
-  .offers__seller {
+  .offer__seller {
     grid-area: seller;
   }
 
-  .offers__rating {
-    grid-area: rating;
-  }
-
-  .offers__stock {
+  .offer__stock {
     grid-area: stock;
-    text-align: right;
   }
 
-  .offers td.offers__price {
+  .offer__price {
     grid-area: price;
-    text-align: left;
   }
 
-  .offers .offers__action {
+  .offer__action {
     grid-area: action;
-    width: auto;
   }
 
-  .offers__optional {
-    display: none;
-  }
-
-  .offers__label {
-    display: inline;
-    color: var(--color-text-muted);
-  }
-
-  .offers__action .button {
+  .offer__action .button {
     min-height: var(--touch-target);
-    padding: 0 var(--space-3);
+  }
+
+  .offer__sales {
+    display: none;
   }
 }
