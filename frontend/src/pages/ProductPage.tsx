@@ -9,6 +9,7 @@ import { formatPrice } from '../lib/money'
 import { type SellerMark, sellerMarks } from '../lib/sellerMark'
 import { useAsync } from '../lib/useAsync'
 import '../blocks/blocks.css'
+import '../components/ProductCard.css'
 import './ProductPage.css'
 
 /** One product: its details and every seller's offer, for comparing. */
@@ -23,8 +24,18 @@ export function ProductPage() {
 
   if (product.status === 'loading') {
     return (
-      <div className="container product">
-        <p>Loading…</p>
+      // The page's shape while it loads: cover, title, a few lines.
+      <div className="container product" aria-busy="true">
+        <p className="visually-hidden">Loading the product…</p>
+        <div className="product__top product__top--loading" aria-hidden="true">
+          <div className="skeleton skeleton--cover" />
+          <div className="product__loading-lines">
+            <div className="skeleton skeleton--line product__loading-title" />
+            <div className="skeleton skeleton--line" />
+            <div className="skeleton skeleton--line skeleton--short" />
+          </div>
+          <div className="skeleton product__loading-box" />
+        </div>
       </div>
     )
   }
@@ -93,6 +104,7 @@ function ProductView({ product }: { product: ProductDetail }) {
               <dd>{formatDate(product.release_date)}</dd>
             </div>
           </dl>
+          <p className="product__description">{product.description}</p>
         </div>
 
         {/* The price box holds the page's one yellow button. The buttons in
@@ -147,13 +159,6 @@ function ProductView({ product }: { product: ProductDetail }) {
         </section>
       )}
 
-      <section className="product__section">
-        <h2>Product description</h2>
-        <div className="panel">
-          <p>{product.description}</p>
-        </div>
-      </section>
-
       {/* The key rebuilds the row when the visitor opens another product. */}
       <MoreOnPlatform key={product.slug} platform={product.platform} currentSlug={product.slug} />
     </div>
@@ -207,7 +212,17 @@ function MoreOnPlatform({ platform, currentSlug }: { platform: string; currentSl
   const list = useAsync((signal) => listProducts(`platform=${encodeURIComponent(platform)}`, signal), platform)
   if (list.status !== 'ready') return null
 
-  const others = list.data.items.filter((item) => item.slug !== currentSlug).slice(0, 6)
+  // One card per game: a game sold for two regions would otherwise show the
+  // same picture twice. The game being viewed is left out altogether.
+  const current = list.data.items.find((item) => item.slug === currentSlug)
+  const seenTitles = new Set(current ? [current.title] : [])
+  const others = []
+  for (const item of list.data.items) {
+    if (item.slug === currentSlug || seenTitles.has(item.title)) continue
+    seenTitles.add(item.title)
+    others.push(item)
+    if (others.length === 6) break
+  }
   if (others.length === 0) return null
 
   return (

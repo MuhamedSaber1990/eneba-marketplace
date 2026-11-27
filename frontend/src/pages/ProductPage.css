@@ -49,6 +49,26 @@
   width: 224px;
 }
 
+/* The loading placeholder uses the same three columns as the real page. */
+.product__top--loading {
+  margin-top: 41px; /* where the breadcrumb will be */
+}
+
+.product__loading-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.product__loading-title {
+  width: 70%;
+  height: 28px;
+}
+
+.product__loading-box {
+  height: 215px;
+}
+
 .product__title {
   font-size: var(--text-title);
   font-weight: var(--font-bold);
@@ -72,6 +92,14 @@
 .product__facts dd {
   margin: 0;
   font-weight: var(--font-bold);
+}
+
+.product__description {
+  max-width: 60ch;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-accent);
+  color: var(--color-text-soft);
 }
 
 .product__region {
@@ -121,10 +149,6 @@
   margin-bottom: var(--space-3);
   font-size: 1.125rem;
   font-weight: var(--font-bold);
-}
-
-.product__section .panel p {
-  max-width: 75ch;
 }
 
 /* The number in "3 other offers". */
