@@ -4151,3 +4151,67 @@ Noted, and it is queued behind the redesign. The plan as it now stands:
 That last point adds one endpoint I had not listed: `POST /api/account`, for a signed-in user only. It gets the same protections as the other changing requests (the Origin check, JSON only) and the same name rule as sign-up, with tests. Email and password stay unchangeable there, which goes into the README's limitations.
 
 **The image batch is still running.** I will come back with the contact sheet when it ends, and stop there for your approval.
+
+
+### Reply 42
+
+All 27 images are generated and the contact sheets are ready. Nothing is in the repository. I am stopping here for your approval, and I recommend redoing six of them.
+
+*(This reply follows the end of the background batch. There was no new prompt.)*
+
+## Where to look
+
+- **Covers, 24 on one sheet:** `/home/swardhunter/eneba-reference/generated/contact-sheet.png`
+- **Banners, 3 on one sheet:** `/home/swardhunter/eneba-reference/generated/banner-sheet.png`
+- Originals in `originals/`, converted files in `webp/`, every prompt in `prompts.md`, all in that same folder.
+
+## The numbers
+
+- **27 of 27 generated, no failures, no limit reached.** Most took 40 to 60 seconds, a few up to 5 minutes. Three ran at a time.
+- **Covers:** 450 x 600 WebP, from 16 KB to 54 KB. All under your 60 KB target.
+- **Banners:** 1600 x 640 WebP, 56 to 84 KB.
+- **Quota:** I still cannot see it from here. 27 images were made today in total, plus the one failed start that produced nothing.
+
+## What worked
+
+- The palettes differ as planned, so the store no longer reads as one tile: teal Hollow Tide, ice-blue Frostline Rally, amber Dune Runners, green Pocket Kingdoms.
+- The moods follow the genre. Hollow Tide and Obsidian Vow are dark and quiet, with no cartoon faces. Pocket Kingdoms and Paper Planets are light.
+- Every cover leaves its bottom third dark for the title.
+- I found no text, letters or logos on any of them at sheet size, and looked at four closely.
+
+## What I would redo, and why
+
+**The reference image leaked a character.** I attached the kart cover to every run to hold the style, and told it to copy the rendering and not the subject. On four covers it copied the driver anyway: the same magenta ponytail and striped helmet.
+
+1. **Starfall Odyssey**: the pilot is the kart driver.
+2. **Neon Drift 2089**: the driver again, and a magenta palette close to the kart's.
+3. **Verdant Protocol**: the suited figure has the same hair and a magenta suit.
+4. **Mythforge Legends**: the blacksmith has the same magenta hair and face.
+
+That is my mistake in the method, not bad luck. For the redos I will drop the reference image and describe the style in words only. The darker covers show the style holds without a face to copy.
+
+**Two look too much like existing games.** You said nothing that resembles one.
+
+5. **Banner "play"**: the creatures read as Pokémon to me. A red and cream fox creature, a turtle with a leaf on its head, a small blue one. I asked for "original cartoon creatures" and that is where the model went. I would change the subject completely, for example toy-like vehicles and balloons over a floating playground, with no creatures.
+6. **Circuit Breakers**: the blue robot with a glowing face screen is close to Astro Bot. I would redo it with boxier robots that have no face screen.
+
+## Your call, I would keep them
+
+- **Tiny Titans League** is far more cartoon than the rest: a caricature footballer with a huge grin. It fits "football with oversized heads", but it is the one cover that looks like it came from another shop.
+- **Gearheart Garage**: the car is shaped like a real 1950s British saloon. No badge and no name, but a car person would recognize the shape.
+- **Banner "keys"**: the crop to a wide strip cuts the top of the key and the bottom of the chest. It can be cropped a little lower, or regenerated with more room.
+- **Ashen Crown** and **Emberwatch** are both a figure from behind against fire in red and orange. They are different games in the same palette.
+
+## What I did not check
+
+- **Whether any image resembles something I do not know.** I can catch the famous ones. I cannot rule out a likeness to a game or artist I have not seen. Your eyes on the sheet are the real check.
+- **Each image at full size.** I looked at the sheet and at four covers up close. I will look at every approved file at full size before it goes into the repository.
+- **How the titles read over the art.** That needs the overlay, which is not built yet.
+
+## What I need from you
+
+1. **Which to redo.** My list is 1 to 6. Add or remove any.
+2. For each redo, whether my suggested change is right, or what you would rather see.
+3. Anything in the "your call" list you want changed.
+
+Redos cost one image each. After that I rebuild the sheet, show you again, and only then start on the code.
