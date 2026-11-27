@@ -7,8 +7,12 @@
   /* Colors */
   --color-page: #4618ac;
   --color-panel: #1f0a4d; /* card text area */
-  --color-panel-raised: #351183; /* description boxes */
+  --color-panel-raised: #351183; /* description boxes, cart panels */
+  --color-band: #311178; /* every second homepage section, offer rows */
+  --color-band-nav: #341281; /* the category bar */
+  --color-side-panel: #5825cc; /* store filters, the product page's price box */
   --color-accent: #7a4edf;
+  --color-lime: #84e916; /* discount percent and "Ends in" on a card */
   --color-primary: #fad318; /* main button */
   --color-on-primary: #000000;
   --color-mint: #63e3c2;

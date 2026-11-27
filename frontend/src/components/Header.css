@@ -3,7 +3,7 @@
   align-items: center;
   gap: var(--gap);
   min-height: var(--header-row);
-  padding-top: var(--space-2);
+  padding: var(--space-3) 0;
 }
 
 .header__logo {
@@ -25,6 +25,7 @@
 .header__account {
   display: flex;
   align-items: center;
+  margin-left: auto; /* pushed to the right edge; the search stays by the logo */
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
 }
@@ -57,21 +58,41 @@
 
 /* A long email is cut with an ellipsis so it cannot push the cart off screen. */
 .header__account .header__user {
-  display: block;
-  max-width: 200px;
-  line-height: var(--touch-target);
+  gap: var(--space-1);
+  max-width: 230px;
+}
+
+.header__user span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.header__user svg {
+  flex-shrink: 0;
+}
+
+/* Signed out: a person icon, then "Log in | Register". */
+.header__guest {
+  display: flex;
+  align-items: center;
+  padding-left: var(--space-2);
+}
+
+.header__account .header__guest a {
+  padding: 0 var(--space-1);
 }
 
 .header__account a:hover {
   color: var(--color-primary);
 }
 
+.header__band {
+  background: var(--color-band-nav);
+}
+
 .header__nav {
   display: flex;
-  justify-content: center;
   min-height: var(--nav-row);
   font-weight: var(--font-semibold);
   color: var(--color-text-nav);
@@ -82,6 +103,11 @@
   align-items: center;
   padding: var(--space-2);
   white-space: nowrap;
+}
+
+/* The first link's text lines up with the logo above it. */
+.header__nav a:first-child {
+  padding-left: 0;
 }
 
 .header__nav a:hover {
@@ -99,16 +125,17 @@
     margin-left: auto;
   }
 
+  .header__main {
+    padding: var(--space-2) 0;
+  }
+
   .header__account .header__user {
-    max-width: 130px;
+    max-width: 150px;
   }
 
   /* The category bar scrolls sideways inside itself, the page does not. */
   .header__nav {
-    justify-content: flex-start;
     overflow-x: auto;
-    margin: 0 calc(-1 * var(--page-padding));
-    padding: 0 var(--space-2);
     scrollbar-width: none; /* swipe to scroll, no bar */
   }
 }

@@ -3,6 +3,7 @@ import { getFilters } from '../api/catalog'
 import { useAsync } from '../lib/useAsync'
 import { useAuth } from '../state/auth'
 import { useCart } from '../state/cart'
+import { CartIcon, PersonIcon } from './Icons'
 import { SearchBox } from './SearchBox'
 import './Header.css'
 
@@ -37,14 +38,17 @@ export function Header() {
                 shown, so they do not flip from one to the other. */}
             {!auth.loading && auth.user && (
               <Link to="/account" className="header__user" title={auth.user.email}>
-                {auth.user.email}
+                <PersonIcon />
+                <span>{auth.user.email}</span>
               </Link>
             )}
             {!auth.loading && !auth.user && (
-              <>
+              <span className="header__guest">
+                <PersonIcon />
                 <Link to="/signin">Log in</Link>
+                <span aria-hidden="true">|</span>
                 <Link to="/signup">Register</Link>
-              </>
+              </span>
             )}
             <Link
               to="/cart"
@@ -61,7 +65,12 @@ export function Header() {
           </nav>
         </div>
 
-        <nav className="header__nav" aria-label="Categories">
+      </div>
+
+      {/* The category bar is a darker band across the whole window. Its links
+          line up with the page content because they sit in the same column. */}
+      <div className="header__band">
+        <nav className="container header__nav" aria-label="Categories">
           <Link to="/store">All products</Link>
           {platforms.map((platform) => (
             <Link key={platform} to={`/store?platform=${encodeURIComponent(platform)}`}>
@@ -71,15 +80,5 @@ export function Header() {
         </nav>
       </div>
     </header>
-  )
-}
-
-function CartIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M3 4h2l2.4 11h10.2L20 7H6.2" />
-      <circle cx="9" cy="19" r="1.5" />
-      <circle cx="17" cy="19" r="1.5" />
-    </svg>
   )
 }
