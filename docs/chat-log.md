@@ -4424,3 +4424,112 @@ You asked for this after the art was in. Numbered, fix or leave, nothing built.
 1. **Ok to run migration 007 on production.**
 2. **Ok to push** after it: the art, the seller color fix from before, and the chat log. I would then check the live site: covers, banners, the cache header, and one Stripe payment.
 3. **The layout list:** which numbers to build and which to drop. I will build them in a separate round, after the art is live.
+
+
+### Prompt 39
+
+````text
+That's a huge difference, this is what I wanted.
+
+1. Yes, run migration 007 on production.
+2. Yes, push after it, then check the live site: covers, banners, the cache header and one Stripe payment.
+3. Layout list: build all ten, in a separate round after the art is live like you said. For number 9 keep the platform accent subtle, it shouldn't fight with the art.  Your "leave" list is fine.
+
+After the layout round comes the sign-up work, then the README.
+````
+
+### Reply 45
+
+The art is live and checked. The layout round, all ten items, is built and committed locally, not pushed.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app
+
+## Part 1: the art is live
+
+**Migration 007 on production**
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+applied 007_banner_images.sql
+```
+I ran it before pushing, and checked that the old code kept serving the banners in between. It did.
+
+**Push:** CI passed on both jobs.
+
+**Live checks**
+
+| Check | Result |
+|---|---|
+| Banners from the API | all three carry their picture's address |
+| A cover file | 200, `image/webp`, 20 KB |
+| A banner file | 200, `image/webp`, 47 KB |
+| Cache header on both | `public, max-age=31536000, immutable` |
+| Homepage in a browser | 18 covers loaded at 450 wide, 18 titles drawn over them, 3 banners with pictures |
+| Footer | "Cover and banner art is AI-generated. Not affiliated with Eneba." |
+| SVG fallback endpoint | still answers, as the fallback |
+| Security policy header | present, unchanged |
+| Stripe | bought Paper Planets for €8.59 with `4242 4242 4242 4242`. "Paid" with one key 6 seconds after returning |
+| Console errors | none |
+
+**One thing I noticed:** asking for a cover file that does not exist returns the site's HTML page with status 200, not a 404. That is how the single-page fallback in `vercel.json` works. It cannot happen for a real cover, because the test that compares the list with the files fails CI first. I am telling you so it is not a surprise.
+
+This left one more paid order on the demo account on production.
+
+## Part 2: the layout round
+
+### Before and after
+
+In `~/eneba-marketplace/docs/screenshots/`. "Before" is the art round.
+
+| Page | Before | After |
+|---|---|---|
+| Home, top | `art/home-0.png` | `layout/home-0.png` |
+| Home, middle | `art/home-1.png` | `layout/home-1.png` |
+| Home, bottom and footer | none | `layout/home-2.png` |
+| Store | `art/store-0.png` | `layout/store-0.png` |
+| Product | `art/product-0.png` | `layout/product-0.png` |
+| Cart | `art/cart-0.png` | `layout/cart-0.png` |
+| Phone | `art/phone-home.png` | `layout/phone-home.png`, `layout/phone-product.png` |
+
+### The ten items
+
+1. **Hero banner** is 400 high, was 320, with a larger headline.
+2. **Small banners** show a title and a button. The subtitle is still in the page for screen readers.
+3. **Platform tiles** each show three covers from that platform, fanned like a hand of cards. Backend: the platforms endpoint sends up to three cover addresses, with a test.
+4. **Product page:** the description is beside the cover, under the facts. The separate section is gone.
+5. **Card hover:** the card lifts, the picture grows 5% inside its frame, and a yellow line draws along the bottom. Keyboard focus gets the same.
+6. **Section headings** have a short yellow bar, the same one as in the logo.
+7. **Footer:** three columns. Shop (the platforms), Account (log in and register, or your account and orders when signed in), About (the repository, `DECISIONS.md`, how the art was made).
+8. **Loading placeholders** have the shape of a card: a cover and three lines, with a slow shimmer. The product page has one too, in its three columns. The shimmer is off for visitors who ask for reduced motion.
+9. **Platform accent:** a 2-pixel line above the platform's name, in a soft color per platform. Green for Xbox, light blue for Steam, blue for PlayStation, red for Switch. It is thin on purpose, as you asked. Look at `layout/home-0.png` and tell me if it is too faint or still too much.
+10. **Best sellers under the cart.**
+
+### Two things I added that were not on the list
+
+- **"More on Steam" showed the same game twice** when it is sold for two regions: two identical pictures side by side. Each game appears once now. I saw it in my own screenshot.
+- **The platform list is loaded once** and handed to the header and the footer. Without that, the footer would have asked the API a second time for the same list.
+
+### Decisions worth knowing
+
+- **Which three covers a tile shows:** a fixed pick per platform, ordered by a hash of title and platform. Ordering by date would have put the same newest games on all four tiles.
+- **The footer's About links leave the site** for GitHub and open in a new tab. They point at files on the `main` branch, which exist.
+- It is all in `DECISIONS.md` entry 86.
+
+### Tests and checks
+
+- All six Go packages pass, with a new check on the tile covers (one to three, no repeats, all illustrations). `gofmt`, `go vet` and `govulncheck` are clean.
+- Frontend: lint, type check, build, 65 tests.
+- In a browser on the built site with the real security headers, at 1440 and 390 wide: home, store, product, cart, checkout, a paid order, the empty search page. No console errors, no policy violations, no page wider than the window.
+- Measured, not only looked at: every tile holds three covers inside its box, and the "More on" row has six different games.
+
+### Not verified
+
+- **The hover and the shimmer in motion.** Screenshots are still images. I checked the rules are in the built stylesheet, but I have not watched them move. Please hover a card and reload a page yourself.
+- **Reduced motion.** The rule is there. I did not test with the system setting switched on.
+- **Chromium only.**
+- **The loading placeholder for the product page** is only visible for a moment on a fast connection, and I did not capture it.
+
+## What I need from you
+
+**Ok to push** the layout round: seven commits and the chat log. No migration, no Vercel change. The backend change is one extra field on the platform tiles.
+
+After the push I will check the live site again, then start the sign-up work as planned. Its first step is a migration on dev, and I will come back with the summary and the SQL before anything touches production.
