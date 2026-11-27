@@ -1,4 +1,5 @@
 import { Outlet, Route, Routes } from 'react-router-dom'
+import { getFilters } from './api/catalog'
 import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { RequireAuth } from './components/RequireAuth'
@@ -12,21 +13,28 @@ import { OrdersPage } from './pages/OrdersPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import { ProductPage } from './pages/ProductPage'
 import { StorePage } from './pages/StorePage'
+import { useAsync } from './lib/useAsync'
 import { AuthProvider } from './state/AuthProvider'
 import { CartProvider } from './state/CartProvider'
 
 /** Header and footer around whichever page matches the URL (the Outlet). */
 function Layout() {
+  // The platforms that exist in the catalog, for the category bar and the
+  // footer. Loaded once here and handed to both. If the request fails, both
+  // still show "All products".
+  const filters = useAsync(getFilters, 'filters')
+  const platforms = filters.status === 'ready' ? filters.data.platforms : []
+
   return (
     <>
       <a href="#main" className="skip-link">
         Skip to content
       </a>
-      <Header />
+      <Header platforms={platforms} />
       <main id="main">
         <Outlet />
       </main>
-      <Footer />
+      <Footer platforms={platforms} />
     </>
   )
 }

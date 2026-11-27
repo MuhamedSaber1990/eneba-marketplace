@@ -1,13 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
-import { getFilters } from '../api/catalog'
-import { useAsync } from '../lib/useAsync'
 import { useAuth } from '../state/auth'
 import { useCart } from '../state/cart'
 import { CartIcon, PersonIcon } from './Icons'
 import { SearchBox } from './SearchBox'
 import './Header.css'
 
-export function Header() {
+export function Header({ platforms }: { platforms: string[] }) {
   // On the results page the box shows what was searched. The key makes React
   // build a fresh box when the page or the searched text changes, so the box
   // is cleared after opening a product and refilled on a new search.
@@ -16,11 +14,6 @@ export function Header() {
 
   const auth = useAuth()
   const cart = useCart()
-
-  // The category bar lists the platforms that exist in the catalog. If the
-  // request fails, the bar still shows "All products".
-  const filters = useAsync(getFilters, 'filters')
-  const platforms = filters.status === 'ready' ? filters.data.platforms : []
 
   return (
     <header className="header">
