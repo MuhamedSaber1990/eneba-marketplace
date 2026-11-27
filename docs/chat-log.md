@@ -3471,3 +3471,97 @@ Numbered so you can strike any of them.
 3. The "More on Steam" row: yes or no.
 
 After that I build it locally, show you before and after screenshots, and ask before pushing.
+
+### Prompt 30
+
+````text
+Build 1 to 20, I'm not dropping any.
+
+Item 11: yes, add the buttons on the store cards. Sold-out products only get "View offers" like you said.
+
+The "More on Steam" row: yes, using the product's own platform. Keep it to one row and skip it if there's nothing else on that platform.
+
+Your "leave" list is right, especially not faking features we don't have.
+
+Do it in small commits so I can follow, show me before and after screenshots for each page, and ask before pushing.
+````
+
+### Reply 35
+
+All 20 items are built, plus the store card buttons and the "More on" row. It is committed locally in eight commits and not pushed. Nothing on the live site has changed.
+
+## Before and after
+
+All in `~/eneba-marketplace/docs/screenshots/phase8/`, at 1440 wide. These are our own pages, so they are in the repository. Your Eneba screenshots were only read, never copied.
+
+| Page | Before | After |
+|---|---|---|
+| Home, top | `before-home-0.png` | `after-home-0.png` |
+| Home, further down | `before-home-1.png` | `after-home-1.png` |
+| Store | `before-store-0.png` | `after-store-0.png` |
+| Product | `before-product-0.png` | `after-product-0.png` |
+| Cart | `before-cart-0.png` | `after-cart-0.png` |
+| Checkout | none taken | `after-checkout-0.png` |
+| Paid order | none taken | `after-order-paid.png` |
+| Phone, product and cart | none taken | `after-phone-product.png`, `after-phone-cart.png` |
+
+I have no "before" for checkout and the order page, because I did not screenshot them before starting. The older `docs/screenshots/order-paid-stripe.png` shows the order page as it was.
+
+## The commits, in order
+
+1. **Header** (items 1 to 3): the category bar is a darker band across the window with links from the left edge, the search box follows the logo, a person icon sits before "Log in | Register".
+2. **Covers** (item 6): the platform strip is centered and in normal case. This is in the Go code that draws the covers.
+3. **Homepage** (items 4, 5, 7): alternating bands, a centered "Show all" button under each row, the discount on the price line in lime with "Ends in" below it.
+4. **Product list field** (item 11, backend): `from_offer_id`, with a test.
+5. **Store** (items 8 to 11): filter panel with dividers, drawn checkboxes, sort as bold text, two buttons on each card.
+6. **Product page** (items 12 to 17, plus the "More on" row).
+7. **Cart, checkout, order** (items 18 to 20).
+8. **Docs:** `DECISIONS.md` entries 77 to 80, the measured colors in `docs/design-reference.md`, the screenshots.
+
+## Things I decided while building
+
+**Colors were measured, and one of mine was wrong.** I read single pixels from your screenshots:
+- category bar `#341281`, section band `#311178`, filter panel and price box `#5825cc`, cart panels `#351183`.
+- Our price box was `#7a4edf`. That was a wrong reading from phase 0: it is their lighter badge color, not the panel. It is now `#5825cc`. This was item 16.
+
+**Covers got a version number.** Browsers keep a cover for a day. After the strip changed, returning visitors would have seen old and new covers mixed. Each cover's address now ends in `?v=2`.
+
+**The product card is no longer one big link.** A button inside a link is not valid HTML. The cover and text are the link, and the buttons sit beside it.
+
+**"Add to cart" on a card and "Best offer" on the product page are always the same offer.** Two offers can cost the same, so both places break the tie the same way (the lower offer id). A test checks it for every product.
+
+**One button component** is used by the card, the price box and the offer rows, so "In cart (2)" and the limit of 5 behave the same everywhere.
+
+**The offers are a list now, not a table.** With no column headings left, a table had nothing to offer. Each row says "4.5 / 5 rating · 38,120 sales" and "12 in stock" in words. On phones the row folds into three lines.
+
+**The step line is on three pages:** Cart is step 1, checkout and an unpaid order are step 2, a paid order is step 3. The steps are not links.
+
+**Seller marks:** a letter on one of six colors, picked from the seller's name. In the product screenshot both sellers happen to get the same green. With six colors that will occur. Say so if you want it avoided.
+
+## What I checked
+
+- **Go:** `gofmt`, `go vet`, all six packages pass, `govulncheck` is clean.
+- **Frontend:** lint, type check, build, and 63 unit tests (4 new, for the seller mark).
+- **In a browser, at 1440 and at phone width (390):** home, store, product, cart, checkout, a new order, paying it, the empty search page. No console errors, and no page wider than the window.
+- **The same pages on the built site with the real security headers.** No Content-Security-Policy violations. The drawn checkboxes and the seller mark colors work under it.
+- **The whole purchase** on the dev database with the new pages: add from a store-style button, cart, sign in, place order, pay (simulated), key shown.
+
+## Not verified
+
+- **Stripe with the new order page.** Locally I ran in simulated mode. The order page only gained the step line, so I expect no effect, and I will pay with the test card on the live site after the push.
+- **Keyboard and screen reader use of the new controls.** They are real buttons and real checkboxes with labels, and I checked focus is visible, but I did not run a screen reader.
+- **Browsers other than Chromium.** The drawn checkbox uses a standard technique, but I only looked at it in one browser.
+- **Sold-out cards.** The code shows only "View offers" for them and the type check covers the null case, but no product on dev is sold out right now, so I did not see one.
+
+## Side effects
+
+- The dev database has one more paid test order on the demo account.
+- `DEMO_RESTOCK` was not set locally, so nothing was restocked there.
+
+## What I need from you
+
+**Ok to push** ten local commits: the eight above and two chat log entries. No migration and no Vercel change. The backend change is one extra field in the product list.
+
+After the push I will check CI, look at the live pages, add to cart from a store card, and pay for one order through Stripe to confirm the order page still works there.
+
+After that, what is left of phase 8 is the README and then the walkthrough and quiz.
