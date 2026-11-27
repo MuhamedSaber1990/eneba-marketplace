@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { type Filters, getFilters, listProducts } from '../api/catalog'
 import { Pagination } from '../components/Pagination'
+import { BEST_SELLERS_BLOCK } from '../blocks/bestSellersBlock'
 import { ProductRowBlock } from '../blocks/ProductRowBlock'
 import { ProductCard, ProductCardSkeleton } from '../components/ProductCard'
 import { useAsync } from '../lib/useAsync'
@@ -18,14 +19,6 @@ const SORT_OPTIONS = [
   { value: 'name', label: 'Name: A to Z' },
 ]
 
-// Shown under "no results", so a failed search is not a dead end. It is the
-// homepage's best sellers block, pointed at the same endpoint.
-const BEST_SELLERS_BLOCK = {
-  type: 'best_sellers',
-  title: 'Best sellers',
-  see_all_url: '/store',
-  endpoint: '/api/home/best-sellers',
-}
 
 /**
  * The catalog, and also the search results page: `mode="search"` is the same
@@ -165,7 +158,7 @@ export function StorePage({ mode = 'store' }: { mode?: 'store' | 'search' }) {
                 )}
               </div>
               {isSearch && (
-                <div className="store__fallback">
+                <div className="store__fallback embedded-block">
                   <ProductRowBlock block={BEST_SELLERS_BLOCK} />
                 </div>
               )}

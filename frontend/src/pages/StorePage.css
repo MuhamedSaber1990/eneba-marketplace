@@ -151,17 +151,6 @@
   margin-top: var(--space-4);
 }
 
-/* The row is a homepage block. Here it is already inside the page column,
-   so it gives up its own band, spacing and side padding. */
-.store__fallback .home-block {
-  padding: 0;
-  background: none;
-}
-
-.store__fallback .home-block > .container {
-  padding: 0;
-}
-
 .store__fallback .product-row {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

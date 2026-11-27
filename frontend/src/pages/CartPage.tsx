@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { priceCart } from '../api/checkout'
+import { BEST_SELLERS_BLOCK } from '../blocks/bestSellersBlock'
+import { ProductRowBlock } from '../blocks/ProductRowBlock'
 import { CartLines } from '../components/CartLines'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { BinIcon, MinusIcon, PlusIcon } from '../components/Icons'
@@ -8,6 +10,7 @@ import { MAX_QUANTITY } from '../lib/cart'
 import { formatPrice } from '../lib/money'
 import { useAsync } from '../lib/useAsync'
 import { useCart } from '../state/cart'
+import '../blocks/blocks.css'
 import './Checkout.css'
 
 /**
@@ -48,6 +51,9 @@ export function CartPage() {
           <Link to="/store" className="button">
             Browse the store
           </Link>
+        </div>
+        <div className="cart__more embedded-block">
+          <ProductRowBlock block={BEST_SELLERS_BLOCK} />
         </div>
       </div>
     )
@@ -134,6 +140,11 @@ export function CartPage() {
           </aside>
         </div>
       )}
+
+      {/* Something to go on with, under the cart. */}
+      <div className="cart__more embedded-block">
+        <ProductRowBlock block={BEST_SELLERS_BLOCK} />
+      </div>
     </div>
   )
 }
