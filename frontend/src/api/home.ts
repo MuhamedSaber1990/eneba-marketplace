@@ -41,6 +41,7 @@ export type BestSeller = ProductSummary & { units_sold: number }
 export type PlatformTile = {
   name: string
   product_count: number
+  covers: string[] // up to three cover pictures from this platform
 }
 
 /** The list of blocks on the homepage, in page order. */

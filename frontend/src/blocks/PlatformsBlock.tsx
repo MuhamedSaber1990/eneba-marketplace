@@ -15,9 +15,18 @@ export function PlatformsBlock({ block }: BlockProps) {
           ? Array.from({ length: 4 }, (_, index) => <div key={index} className="platform-tile platform-tile--loading" aria-hidden="true" />)
           : platforms.map((platform) => (
               <Link key={platform.name} to={`/store?platform=${encodeURIComponent(platform.name)}`} className="platform-tile">
-                <span className="platform-tile__name">{platform.name}</span>
-                <span className="platform-tile__count">
-                  {platform.product_count} {platform.product_count === 1 ? 'product' : 'products'}
+                {/* Three covers fanned out, to show what is behind the tile.
+                    They are decoration: the name and the count say it in words. */}
+                <span className="platform-tile__covers" aria-hidden="true">
+                  {platform.covers.map((cover) => (
+                    <img key={cover} src={cover} alt="" width={90} height={120} loading="lazy" />
+                  ))}
+                </span>
+                <span className="platform-tile__text">
+                  <span className="platform-tile__name">{platform.name}</span>
+                  <span className="platform-tile__count">
+                    {platform.product_count} {platform.product_count === 1 ? 'product' : 'products'}
+                  </span>
                 </span>
               </Link>
             ))}

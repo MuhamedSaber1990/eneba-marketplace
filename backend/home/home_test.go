@@ -243,6 +243,17 @@ func TestPlatforms(t *testing.T) {
 		if err != nil {
 			t.Fatalf("List(%s): %v", p.Name, err)
 		}
+		// The tile's covers: a few, all different, all illustrations.
+		if len(p.Covers) == 0 || len(p.Covers) > tileCovers {
+			t.Errorf("%s: %d covers on the tile, want 1 to %d", p.Name, len(p.Covers), tileCovers)
+		}
+		seen := map[string]bool{}
+		for _, cover := range p.Covers {
+			if !strings.HasPrefix(cover, "/covers/") || seen[cover] {
+				t.Errorf("%s: cover %q is repeated or is not an illustration", p.Name, cover)
+			}
+			seen[cover] = true
+		}
 		if listed.Total != p.ProductCount {
 			t.Errorf("%s: tile says %d products, the store lists %d", p.Name, p.ProductCount, listed.Total)
 		}
