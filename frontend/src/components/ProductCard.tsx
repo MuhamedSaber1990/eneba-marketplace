@@ -66,7 +66,16 @@ export function ProductCard({ product, rank, withActions = false }: Props) {
   )
 }
 
-/** A grey placeholder with the card's shape, shown while products load. */
+/** A placeholder with the card's shape (cover, two lines, price), shown while products load. */
 export function ProductCardSkeleton() {
-  return <div className="product-card product-card--skeleton" aria-hidden="true" />
+  return (
+    <div className="product-card product-card--skeleton" aria-hidden="true">
+      <div className="skeleton skeleton--cover" />
+      <div className="product-card__body">
+        <div className="skeleton skeleton--line" />
+        <div className="skeleton skeleton--line skeleton--short" />
+        <div className="skeleton skeleton--price" />
+      </div>
+    </div>
+  )
 }

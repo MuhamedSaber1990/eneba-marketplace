@@ -29,8 +29,38 @@
   width: 100%;
 }
 
-.product-card:hover {
+/* On hover, and when a link or button inside has keyboard focus: the card
+   lifts, the picture grows a little inside its frame, and a yellow line
+   appears along the bottom. */
+.product-card:hover,
+.product-card:focus-within {
   transform: translateY(-4px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.product-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: var(--color-primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 200ms ease;
+}
+
+.product-card:hover::after,
+.product-card:focus-within::after {
+  transform: scaleX(1);
+}
+
+.product-card .cover img {
+  transition: transform 300ms ease;
+}
+
+.product-card:hover .cover img,
+.product-card:focus-within .cover img {
+  transform: scale(1.05);
 }
 
 /* Holds the cover and any badge placed on top of it. */
@@ -108,7 +138,54 @@
   color: var(--color-text-muted);
 }
 
-.product-card--skeleton {
-  aspect-ratio: 225 / 420;
-  opacity: 0.5;
+/* ---- Loading placeholder: the shape of a card, with a slow shimmer ---- */
+
+.product-card--skeleton:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.product-card--skeleton::after {
+  display: none;
+}
+
+.skeleton {
+  background: linear-gradient(100deg, var(--color-panel-raised) 40%, var(--color-accent) 50%, var(--color-panel-raised) 60%);
+  background-size: 300% 100%;
+  animation: shimmer 1.6s linear infinite;
+  opacity: 0.6;
+}
+
+.skeleton--cover {
+  aspect-ratio: 3 / 4;
+}
+
+.skeleton--line {
+  height: 12px;
+}
+
+.skeleton--short {
+  width: 45%;
+}
+
+.skeleton--price {
+  width: 60%;
+  height: 18px;
+  margin-top: var(--space-2);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* People who ask their system for less motion get a still placeholder. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }

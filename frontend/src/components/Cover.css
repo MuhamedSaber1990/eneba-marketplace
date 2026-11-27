@@ -45,3 +45,27 @@
   line-height: 1.2;
   text-align: center;
 }
+
+/* A thin line in a color per platform, above the platform's name. It is the
+   only thing that differs between two editions of the same game, whose
+   pictures are identical. Kept thin and soft so it does not compete with
+   the picture. A platform not listed here simply has no line. */
+.cover__platform {
+  border-top: 2px solid transparent;
+}
+
+.cover__platform[data-platform='Steam'] {
+  border-top-color: #7fb7e6;
+}
+
+.cover__platform[data-platform='Xbox'] {
+  border-top-color: #8fd16a;
+}
+
+.cover__platform[data-platform='PlayStation'] {
+  border-top-color: #7d9bff;
+}
+
+.cover__platform[data-platform='Nintendo Switch'] {
+  border-top-color: #ff7b7b;
+}

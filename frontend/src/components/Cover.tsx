@@ -30,7 +30,11 @@ export function Cover({ src, art, title, platform, lazy = true }: Props) {
       {art && (
         <div className="cover__overlay" aria-hidden="true">
           <span className="cover__title">{title}</span>
-          <span className="cover__platform">{platform}</span>
+          {/* data-platform lets the stylesheet give each platform a thin
+              colored line, so editions of one game can be told apart. */}
+          <span className="cover__platform" data-platform={platform}>
+            {platform}
+          </span>
         </div>
       )}
     </div>
