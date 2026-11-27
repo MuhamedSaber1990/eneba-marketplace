@@ -85,6 +85,8 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **Alternatives:** a public games API; stock photos.
 - **Why:** no licensing questions and no dependency on an external image host.
   The seed script draws each cover (gradient, title, platform badge).
+- **Changed on 2026-11-26, see entry 82:** the covers are now AI-generated
+  illustrations. The products are still invented.
 
 ## 11. Project lives in the WSL filesystem
 
@@ -210,6 +212,9 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   JSON would have made every page of results several times larger. As an
   image URL the browser and the CDN cache it for a day. Text from the
   database is escaped before it goes into the SVG.
+- **Changed on 2026-11-26, see entries 82 and 83:** image files are in the
+  repository after all. This endpoint stays as the fallback for a title that
+  has no illustration.
 
 ## 25. Store filters live in the URL
 
@@ -394,6 +399,8 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   gradient whose two colors come from the `banners` table, so there are no
   image assets to license, store or cache. A dark layer over the gradient
   keeps white text readable whatever colors are stored.
+- **Changed on 2026-11-26, see entry 84:** a banner can now have a picture.
+  The layout and the reasons against a carousel are unchanged.
 
 ## 38. Homepage responses are cached at the edge for 60 seconds
 
@@ -1093,4 +1100,70 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **What was given up:** a seller no longer has one fixed color across the
   whole site. The marks appear only on the product page, and telling two
   rows apart there matters more.
+
+## 82. Covers and banners are AI-generated illustrations
+
+- **The problem:** every cover was a gradient with the title on it, so the
+  store read as one tile repeated 56 times. It was honest and it looked
+  unfinished.
+- **Alternatives:** keep the drawn covers; stock photos; art from real games
+  (not ours to use); commissioning art (no time or budget in a take-home).
+- **Choice:** one illustration per game title, 24 in all, shared by a
+  title's editions, plus 3 banner pictures. Made with the image generation
+  in OpenAI's Codex CLI. `docs/cover-art.md` has the tool, the date and the
+  prompt for every image.
+- **Rules given to the tool:** no text, no logos, no real brands, no
+  existing characters, nothing resembling an existing franchise.
+- **What was checked:** each image was looked at for text, logos and
+  look-alikes. Nine were rejected and made again. Four had copied a
+  character from the style reference I had attached, which was my mistake
+  in the method. Two looked too much like existing game characters. Three
+  were redone for consistency or composition.
+- **What that check cannot do:** rule out a likeness to work nobody here
+  knew. That is a real limit of generated art and is said in the README.
+- **Still invented:** the games, sellers, prices and keys. The site's footer
+  says the art is AI-generated.
+
+## 83. The title is written by the page, not painted into the picture
+
+- **Why not in the image:** image models misspell text, and a title baked
+  into a picture cannot be read by a screen reader, translated or restyled.
+- **How:** the `Cover` component puts the title and the platform over the
+  bottom of the picture on a dark fade. Its text sizes are in container
+  units (`cqw`), a share of the cover's own width, so one rule serves a
+  183-pixel card and the 224-pixel cover on the product page.
+- **Which titles have art** is a list in `backend/catalog/art.go`, not a
+  database column. A test compares the list with the files in
+  `frontend/public/covers` in both directions, so a missing file fails CI
+  and never reaches the site as a broken picture. Adding art for a new game
+  is one file and one line.
+- **`cover_art`** in the API tells the page whether to draw the overlay. The
+  SVG fallback has its title drawn in and must not get a second one.
+- **Small covers** (search dropdown, cart, orders) are the plain picture. A
+  title is not readable at 40 pixels wide.
+- **Why the files are served by the site and not the API:** static files
+  are cached by Vercel's CDN and never start the Go function.
+
+## 84. Banner pictures come from the database, with the gradient as a tint
+
+- **`banners.image_url`** is optional (migration 007). The backend already
+  decided which banners exist and what they say. Now it also decides their
+  picture, which keeps "the backend assembles the homepage" true.
+- **Layers, top to bottom:** a dark fade from the left where the text is,
+  the banner's two colors at part strength as a tint, the picture, then the
+  two colors at full strength. Without a picture only the colors show, so a
+  banner never looks broken.
+- **The migration sets the pictures for the three existing banners itself,**
+  so the production database did not have to be seeded again.
+
+## 85. Art files are cached for a year and replaced by changing their address
+
+- **Rule in `vercel.json`:** `/covers/` and `/banners/` answer with
+  `Cache-Control: public, max-age=31536000, immutable`.
+- **How a changed picture gets through:** the address carries a version
+  (`?v=3` for covers, set in `art.go`; `?v=1` for banners, stored with the
+  banner). A new picture means a new number.
+- **The security policy did not change.** It already allowed images from
+  the site itself and nothing else.
+- **Size:** 27 files, about 1.1 MB in the repository. Covers are 16 to 54 KB.
 
