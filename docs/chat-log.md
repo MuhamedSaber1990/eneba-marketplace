@@ -3870,3 +3870,114 @@ Where things stand:
 When you come back with the design changes, the most useful form for me is the page, what bothers you, and what you would rather see. A screenshot with a mark on it works too. I will answer with a plan before changing anything, as before.
 
 Two parts of the draft will need a second look after the design changes: the homepage screenshot at the top, and the line about styling under the shortcuts.
+
+
+### Prompt 33
+
+````text
+Hold the README, don't commit it yet. I looked at the live site again and I'm not happy with the design. Three things bother me: the game covers (every one is a gradient with the title, so the store looks like one repeated tile), the layout and spacing (sparse, unfinished in places), and that it feels generic. I want to polish what we have, keep the Eneba-like structure and colors, not start over. Give me your plan before building.
+
+Covers: replace them with AI-generated art
+- One illustration per game title (24), shared by all its platform editions. One consistent style for the whole store: stylized key art, a strong single subject, rich color, portrait 3:4. No text, no logos, no real characters, nothing that looks like an existing game.
+- Don't put the title in the image, image models misspell text. Draw the title and the platform strip over the art in the page, on a dark gradient at the bottom.
+- The Codex CLI on this PC is signed in with my ChatGPT account and has image generation. Try one cover first and tell me if it works and what it costs in quota. If it doesn't work, stop and tell me the options, don't spend time fighting it.
+- Save originals and the prompts outside the repo in ~/eneba-reference/generated/, with a prompts.md saying which tool, when, and the prompt for each. Convert to WebP with ffmpeg, covers 450x600, aim for under 60 KB each.
+- Before putting anything in the repo, make one contact sheet image with all 24 covers and show me. I'll say which to redo.
+- Also 3 wide banner images in the same style for the homepage banners, no text.
+
+In the code
+- Approved files go in frontend/public/covers/ and frontend/public/banners/. cover_url points at the image when a title has one, and the SVG endpoint stays as the fallback. Bump the cover version.
+- Small sizes (search dropdown, cart) show the art without the overlay.
+- Banners get an optional image, with the gradient as fallback and as a tint so the text stays readable.
+- Long cache headers for those two folders. No new dependency, no change to the security policy.
+
+Layout and the generic feel
+- After the art is in, look at every page again and give me a numbered list like you did for the Eneba comparison, what you'd fix and what you'd leave. Ideas to consider: a taller hero banner with art, platform tiles that aren't flat boxes, the empty area on the product page, stronger card hover, section headings with some character, a fuller footer, loading placeholders shaped like the cards. No fake features.
+
+Be honest about it
+- README and DECISIONS.md say the covers and banners are AI-generated, with the tool. Update the entries that say there are no image files (10, 24, 37). The catalog is still invented.
+- Same order as always: build locally, before and after screenshots, tests, ask me before pushing.
+````
+
+### Reply 38
+
+The test cover worked. One image is made and nothing else is built. The README stays uncommitted. Below: the test result, what I can and cannot say about quota, and the plan.
+
+## The test cover
+
+- **Title:** Thunder Circuit Kart.
+- **Original:** `/home/swardhunter/eneba-reference/generated/originals/thunder-circuit-kart.png`, 1086 x 1448, 2 MB.
+- **Converted:** `/home/swardhunter/eneba-reference/generated/webp/thunder-circuit-kart.webp`, 450 x 600, **34 KB**, under your 60 KB target.
+- **Time:** 43 seconds.
+- **What it shows:** a cartoon driver in a striped helmet drifting a chunky kart on a wet track, lightning in a magenta sky. The bottom third is dark and plain, as asked, so a title will read on it.
+- **Checked by eye:** no text, no letters, no logos. The driver is not a character I recognize. Look at it yourself too, since "resembles an existing game" is a judgment call and yours is the one that counts.
+- `prompts.md` in that folder has the tool, the date and the exact prompt.
+
+**One false start.** My first attempt sat for 9 minutes and produced nothing. Codex was waiting for keyboard input, which had nothing to do with images. With input closed, the second attempt took 43 seconds.
+
+## Quota: what I can and cannot tell you
+
+- **I cannot see your image quota.** `codex exec` reports tokens but not the plan's image allowance or how much is left. The one place I know of is the status screen inside an interactive Codex session, or your ChatGPT account page.
+- **What the run reported:** 47,368 input tokens, of which 41,600 were cached, and 430 output tokens. The image itself is not in those numbers.
+- **What the full job needs:** 24 covers and 3 banners is 26 more images, plus redos. I would expect 30 to 40 images in total, about 30 minutes of generating.
+- **If the limit is reached partway,** I stop, tell you how many are done, and the SVG covers stay as the fallback for the rest. Nothing breaks.
+
+So please check your usage after this one image if you can, and tell me whether 30 to 40 more is fine.
+
+## Plan, part 1: the art
+
+1. **One style paragraph shared by every prompt** (the one in `prompts.md`), plus one line per title for the subject and one for the palette.
+2. **A different palette per title.** The test is all magenta because I asked for that. If all 24 share a palette, the store is one repeated tile again, only prettier. I will spread them: teal for Hollow Tide, ice blue for Frostline Rally, amber for Dune Runners, and so on.
+3. **Subjects come from the descriptions in the seed,** so the art matches what the product page says. Example: Hollow Tide is "a lighthouse keeper and a sea that rises every night", so a lone lighthouse over dark water.
+4. **To hold the style together,** each run also gets the approved test cover as a reference image, with the instruction to match its rendering, not its content. If that makes them too alike, I drop the reference and say so.
+5. **Each image is checked by eye** for text, logos and look-alikes before it reaches the contact sheet. Failures are regenerated, and `prompts.md` records the redo.
+6. **Banners:** three wide images for the three banners that exist ("Keys from many sellers", "Fresh releases", "Play on Switch"). No consoles or controllers that look like a real product in the third one.
+7. **Conversion with ffmpeg:** covers 450 x 600 WebP, banners about 1600 wide for the large one and 800 for the small ones.
+8. **Contact sheet:** one image, 6 by 4, each cover labelled with its title, at `~/eneba-reference/generated/contact-sheet.png`. I show it and stop. Nothing enters the repository before you approve.
+
+## Plan, part 2: the code
+
+**Covers**
+- Files: `frontend/public/covers/<title>.webp`, for example `thunder-circuit-kart.webp`. One per title, shared by its editions.
+- **How the API knows a title has art:** a short list of titles in the Go code, next to the cover drawing. No database change. A test checks that every title on the list has its file and every file is on the list, so a missing image fails CI and never reaches the site as a broken picture.
+- `cover_url` becomes `/covers/<title>.webp?v=3` for those titles and stays the SVG address for any other.
+- **Two new fields** wherever a cover is sent: `title` (the game's name without platform and region) and `cover_art` (true or false). The page needs them to draw the overlay.
+- **One `Cover` component** in the frontend: the image, and when `cover_art` is true, a dark gradient at the bottom with the title and the platform strip. Product cards, deal cards and the product page use it with the overlay. The search dropdown, cart and order lines use the plain image.
+- The SVG cover keeps its drawn title, so a title without art looks as it does today.
+
+**Banners**
+- **This needs a database change:** migration 007 adds an optional `image_url` column to `banners`, and the seed sets it. That means a production migrate and seed, with your approval as always.
+- The banner draws the image, then the existing gradient over it as a tint, then the text. No image, and it is today's gradient.
+
+**Caching and security**
+- `vercel.json` gets a rule for `/covers/` and `/banners/`: cache for a year. The `?v=` in the address is what lets a changed image through.
+- No new dependency. The Content-Security-Policy already allows images from our own site, so it does not change.
+
+**Tests:** the list-and-files test, the cover address for a title with and without art, and the existing suites.
+
+## Plan, part 3: layout and the generic feel
+
+After the art is in and you have approved it, I take fresh screenshots of every page and give you a numbered fix-or-leave list, covering your seven ideas and whatever else I see. No building before you answer that list. I am not listing fixes now, because real covers will change what looks sparse.
+
+## Plan, part 4: saying what it is
+
+- `DECISIONS.md`: entries 10, 24 and 37 get a dated note that they were replaced, and a new entry says the covers and banners are AI-generated, with the tool, why, and what was checked. I will not rewrite the old entries as if the earlier choice never happened.
+- `README.md`: the "shortcuts" section says the art is AI-generated and the catalog is still invented.
+- The footer on the site gets a short line too, so a visitor does not need the repository to know.
+
+## Order of work
+
+1. Your go on the batch, after you have looked at the test cover and your quota.
+2. Generate, check, contact sheet. Stop for your approval and redos.
+3. Code, locally: covers, banners, migration 007 on dev, tests, before and after screenshots.
+4. Summary and SQL. Then production migrate and seed, and the push, each with your ok.
+5. The layout list, your answer, then that work in its own round.
+
+## Questions
+
+1. **The test cover's style:** is this the look you want for all 24, or should it be more painterly, darker, less cartoon? Changing it now costs one image. Changing it later costs 24.
+2. **Quota:** fine to generate 30 to 40 more?
+3. **Banner images need migration 007 and a production run.** Ok, or would you rather I avoid the database and name the files by banner position?
+4. **`prompts.md` is outside the repository, as you asked.** The art will be in the repository without its prompts. Do you want a copy of the prompts text in `docs/` as well, so Eneba can see exactly how each image was made? I would, but it is your call.
+
+Still held from before: the seller color fix and chat log entries are committed locally and not pushed.
