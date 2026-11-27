@@ -110,11 +110,12 @@ type banner struct {
 	link     string
 	colorA   string
 	colorB   string
+	image    string // a file in frontend/public/banners
 }
 
 // The first banner is the large one.
 var banners = []banner{
-	{"Keys from many sellers, one low price", "Compare every offer for a game and pick the one you like. Up to 40% off selected titles.", "Browse the store", "/store?sort=price_asc", "#7a4edf", "#23c299"},
-	{"Fresh releases", "The newest games in the catalog.", "See what is new", "/store?sort=newest", "#fc466b", "#3f5efb"},
-	{"Play on Switch", "Keys for Nintendo Switch.", "Shop Nintendo", "/store?platform=Nintendo+Switch", "#f7971e", "#c31432"},
+	{"Keys from many sellers, one low price", "Compare every offer for a game and pick the one you like. Up to 40% off selected titles.", "Browse the store", "/store?sort=price_asc", "#7a4edf", "#23c299", "/banners/keys.webp?v=1"},
+	{"Fresh releases", "The newest games in the catalog.", "See what is new", "/store?sort=newest", "#fc466b", "#3f5efb", "/banners/new.webp?v=1"},
+	{"Play on Switch", "Keys for Nintendo Switch.", "Shop Nintendo", "/store?platform=Nintendo+Switch", "#f7971e", "#c31432", "/banners/play.webp?v=1"},
 }

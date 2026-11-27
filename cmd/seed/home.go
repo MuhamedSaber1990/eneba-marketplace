@@ -39,9 +39,9 @@ func seedHome(ctx context.Context, tx pgx.Tx) error {
 
 	for position, b := range banners {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO banners (title, subtitle, cta_label, link, color_a, color_b, position)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			b.title, b.subtitle, b.ctaLabel, b.link, b.colorA, b.colorB, position+1)
+			INSERT INTO banners (title, subtitle, cta_label, link, color_a, color_b, image_url, position)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			b.title, b.subtitle, b.ctaLabel, b.link, b.colorA, b.colorB, b.image, position+1)
 		if err != nil {
 			return fmt.Errorf("inserting banner %q: %w", b.title, err)
 		}

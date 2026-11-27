@@ -7,7 +7,8 @@ import (
 
 // Banner block. Source: the banners table.
 
-// Banner is one promotion panel: text on a gradient with a button.
+// Banner is one promotion panel: text and a button on a picture, or on a
+// two-color gradient when it has no picture.
 type Banner struct {
 	Title    string `json:"title"`
 	Subtitle string `json:"subtitle"`
@@ -15,6 +16,9 @@ type Banner struct {
 	Link     string `json:"link"`
 	ColorA   string `json:"color_a"`
 	ColorB   string `json:"color_b"`
+	// ImageURL is a pointer so it can be nil, which becomes null in JSON: the
+	// banner has no picture and is drawn as the gradient alone.
+	ImageURL *string `json:"image_url"`
 }
 
 // maxBanners is how many panels the banner layout has room for.
@@ -24,7 +28,7 @@ const maxBanners = 3
 // large panel.
 func (s *Store) Banners(ctx context.Context) ([]Banner, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT title, subtitle, cta_label, link, color_a, color_b
+		SELECT title, subtitle, cta_label, link, color_a, color_b, image_url
 		  FROM banners
 		 WHERE active
 		 ORDER BY position, id
@@ -37,7 +41,7 @@ func (s *Store) Banners(ctx context.Context) ([]Banner, error) {
 	banners := []Banner{}
 	for rows.Next() {
 		var b Banner
-		if err := rows.Scan(&b.Title, &b.Subtitle, &b.CTALabel, &b.Link, &b.ColorA, &b.ColorB); err != nil {
+		if err := rows.Scan(&b.Title, &b.Subtitle, &b.CTALabel, &b.Link, &b.ColorA, &b.ColorB, &b.ImageURL); err != nil {
 			return nil, fmt.Errorf("reading a banner row: %w", err)
 		}
 		banners = append(banners, b)

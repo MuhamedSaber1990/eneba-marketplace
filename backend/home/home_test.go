@@ -3,6 +3,7 @@ package home
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,19 @@ func TestBanners(t *testing.T) {
 	for _, b := range banners {
 		if b.Title == "" || b.CTALabel == "" || !strings.HasPrefix(b.Link, "/") {
 			t.Errorf("incomplete banner: %+v", b)
+		}
+		// A banner's picture must be a file that is really in the frontend,
+		// or the banner would silently show only its gradient.
+		if b.ImageURL != nil {
+			path, _, _ := strings.Cut(*b.ImageURL, "?") // drop the ?v=1
+			if !strings.HasPrefix(path, "/banners/") {
+				t.Errorf("banner %q: image %q is not in /banners/", b.Title, *b.ImageURL)
+				continue
+			}
+			file := filepath.Join("..", "..", "frontend", "public", filepath.FromSlash(path))
+			if _, err := os.Stat(file); err != nil {
+				t.Errorf("banner %q: image file is missing: %v", b.Title, err)
+			}
 		}
 	}
 }
