@@ -39,9 +39,12 @@ type ProductSummary struct {
 	// FromPriceCents is the cheapest offer that has keys in stock. It is a
 	// pointer so it can be nil, which becomes null in JSON: the product is
 	// sold out.
-	FromPriceCents *int   `json:"from_price_cents"`
-	OfferCount     int    `json:"offer_count"`
-	CoverURL       string `json:"cover_url"`
+	FromPriceCents *int `json:"from_price_cents"`
+	// FromOfferID is the offer behind that price: what "Add to cart" on a
+	// card puts in the cart. Nil when the product is sold out.
+	FromOfferID *int64 `json:"from_offer_id"`
+	OfferCount  int    `json:"offer_count"`
+	CoverURL    string `json:"cover_url"`
 }
 
 // ListParams are the filters, sort order and page of a store listing.
@@ -90,9 +93,11 @@ func ValidSort(name string) bool {
 }
 
 // PricedProducts is the start of every query that shows products with a
-// price. It defines "priced": every product plus two computed columns.
+// price. It defines "priced": every product plus three computed columns.
 //   - from_price_cents: the lowest price among its offers that still have an
 //     available key, or NULL when none do
+//   - from_offer_id: the offer with that price. Two offers can cost the same,
+//     and then the lower id wins, the same tie-break the product page uses
 //   - offer_count: how many sellers offer it
 //
 // It is exported (capital P) because the homepage blocks in package home
@@ -107,6 +112,14 @@ WITH priced AS (
                AND EXISTS (SELECT 1 FROM keys k
                             WHERE k.offer_id = o.id AND k.status = 'available')
            ) AS from_price_cents,
+           (SELECT o.id
+              FROM offers o
+             WHERE o.product_id = p.id
+               AND EXISTS (SELECT 1 FROM keys k
+                            WHERE k.offer_id = o.id AND k.status = 'available')
+             ORDER BY o.price_cents, o.id
+             LIMIT 1
+           ) AS from_offer_id,
            (SELECT COUNT(*) FROM offers o WHERE o.product_id = p.id) AS offer_count
       FROM products p
 )`
@@ -114,7 +127,7 @@ WITH priced AS (
 // SummaryColumns are the columns of "priced" that make up a ProductSummary,
 // in the order ScanSummary reads them.
 const SummaryColumns = `slug, name, platform, region, genre,
-       to_char(release_date, 'YYYY-MM-DD'), from_price_cents, offer_count`
+       to_char(release_date, 'YYYY-MM-DD'), from_price_cents, from_offer_id, offer_count`
 
 // ScanSummary reads one row selected with SummaryColumns. Extra columns
 // selected after them can be read by passing where to put them.
@@ -124,7 +137,7 @@ const SummaryColumns = `slug, name, platform, region, genre,
 // needed and not a concrete type.
 func ScanSummary(row interface{ Scan(dest ...any) error }, extra ...any) (ProductSummary, error) {
 	var p ProductSummary
-	dest := []any{&p.Slug, &p.Name, &p.Platform, &p.Region, &p.Genre, &p.ReleaseDate, &p.FromPriceCents, &p.OfferCount}
+	dest := []any{&p.Slug, &p.Name, &p.Platform, &p.Region, &p.Genre, &p.ReleaseDate, &p.FromPriceCents, &p.FromOfferID, &p.OfferCount}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return ProductSummary{}, err
 	}
@@ -302,8 +315,9 @@ func (s *Store) Get(ctx context.Context, slug string) (ProductDetail, error) {
 
 		// The first in-stock offer is the cheapest one, because of the ORDER BY.
 		if o.Stock > 0 && detail.FromPriceCents == nil {
-			price := o.PriceCents
+			price, id := o.PriceCents, o.ID
 			detail.FromPriceCents = &price
+			detail.FromOfferID = &id
 		}
 	}
 	if err := rows.Err(); err != nil {

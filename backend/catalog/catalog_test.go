@@ -229,6 +229,22 @@ func TestGet(t *testing.T) {
 				(detail.FromPriceCents != nil && *detail.FromPriceCents != *summary.FromPriceCents) {
 				t.Errorf("%s: list and detail disagree on the from price", summary.Slug)
 			}
+			// "Add to cart" on a card must add the offer the product page
+			// calls the best one: the first offer that has stock.
+			if (detail.FromOfferID == nil) != (summary.FromOfferID == nil) ||
+				(detail.FromOfferID != nil && *detail.FromOfferID != *summary.FromOfferID) {
+				t.Errorf("%s: list and detail disagree on which offer has the from price", summary.Slug)
+			}
+			if summary.FromOfferID != nil {
+				first := detail.Offers[0]
+				if first.ID != *summary.FromOfferID || first.Stock == 0 || first.PriceCents != *summary.FromPriceCents {
+					t.Errorf("%s: from_offer_id %d is not the cheapest offer in stock (%d, stock %d, price %d)",
+						summary.Slug, *summary.FromOfferID, first.ID, first.Stock, first.PriceCents)
+				}
+			}
+			if (summary.FromOfferID == nil) != (summary.FromPriceCents == nil) {
+				t.Errorf("%s: a from price and its offer must come together", summary.Slug)
+			}
 		}
 	})
 }
