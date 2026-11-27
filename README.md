@@ -1,24 +1,143 @@
 # Keybay: a marketplace for digital game keys
 
-A take-home assignment for the Eneba internship: a marketplace web app in
-Eneba's style. React and TypeScript frontend, Go API, PostgreSQL.
+My take-home assignment for the Eneba internship: a marketplace web app in
+Eneba's style, where several sellers offer keys for the same game and a buyer
+picks an offer, pays and receives the key.
 
-**Live:** https://eneba-marketplace-nine.vercel.app
+I built it working with an AI coding agent, Claude Code. The whole
+conversation, every prompt of mine and every reply, is in
+[docs/chat-log.md](docs/chat-log.md), as the brief asks.
 
-This README is a working draft and is completed at the end of the project
-(live URL, test credentials, architecture overview, known limitations).
+React and TypeScript frontend, Go API, PostgreSQL. Not affiliated with Eneba.
 
-- Scope and architecture: [PLAN.md](PLAN.md)
-- Why each choice was made: [DECISIONS.md](DECISIONS.md)
-- Design values measured from eneba.com: [docs/design-reference.md](docs/design-reference.md)
-- Full AI chat history: [docs/chat-log.md](docs/chat-log.md)
+![The homepage](docs/screenshots/layout/home-0.png)
+
+| Store | Product page |
+|---|---|
+| ![The store](docs/screenshots/layout/store-0.png) | ![A product page](docs/screenshots/layout/product-0.png) |
+
+## Try it
+
+**Live site:** https://eneba-marketplace-nine.vercel.app
+
+| | |
+|---|---|
+| Demo login | `demo@keybay.test` / `keybay-demo-2026` |
+| Card that pays | `4242 4242 4242 4242` |
+| Card that is declined | `4000 0000 0000 0002` |
+
+Payment goes through Stripe in test mode, so no real money moves. On
+Stripe's page choose "Card" and use any future expiry date, any three digits
+and any name.
+
+A two-minute tour:
+
+1. Type `circut` in the search box. It finds "Circuit Breakers" despite the
+   typo.
+2. Open a product. Each row is a different seller's offer.
+3. Add one to the cart, go to checkout, sign in with the demo login and place
+   the order. The order page counts down while your keys are held.
+4. Pay with the first card. Back on the order page it says "Confirming your
+   payment" for a few seconds, then shows the key.
+
+You can also create your own account with any email. Nothing is sent to it,
+so it does not have to be real. An account you create starts with no orders,
+while the demo login is shared and shows everyone's test purchases.
+
+## What I built in depth, and where I took shortcuts
+
+The brief says a few features done thoroughly beat many done minimally. I
+picked three.
+
+**Checkout and keys.** A key is a row in the database and can be sold once.
+
+- Placing an order reserves its keys in one statement
+  (`FOR UPDATE SKIP LOCKED`), so two buyers cannot get the same key.
+- A test starts 20 buyers at the same instant against a real database. I
+  first ran it against a naive query and watched it fail, to know the test
+  can catch the bug.
+- An unpaid order expires and its keys go back on sale.
+- Stripe confirms a payment by webhook. The request is verified by its
+  signature, and a repeated or late message cannot deliver keys twice.
+- A payment that arrives after its order expired is refunded automatically.
+
+**Search.** Typo-tolerant search with PostgreSQL's `pg_trgm`, no search
+service. Each word typed must match some word of a product name, so
+`kart xbox` finds the Xbox edition of "Thunder Circuit Kart". The threshold
+was chosen from a table of typos I tested, which is in `DECISIONS.md`.
+
+**Homepage blocks.** The backend decides which blocks the homepage has, in
+what order and with what headings. The frontend only knows how to draw each
+block type. Reordering the homepage is a database change, not a deploy.
+
+**Shortcuts I took on purpose:**
+
+- **The catalog is invented**: 56 products, with sellers, prices and keys
+  made by a seed script. The "best sellers" numbers and the "deals" are seed
+  data, not history.
+- **The cover and banner art is AI-generated**, with the image generation
+  in OpenAI's Codex CLI. [docs/cover-art.md](docs/cover-art.md) has the
+  prompt for every image. The title on each cover is written by the page,
+  not painted into the picture.
+- **Accounts have no email behind them.** Sign-up asks for a name, a
+  password typed twice and agreement to the terms, and the server checks
+  all of it again. But there is no email service, so no verification and no
+  password reset.
+- **No seller side and no admin.** Offers and stock come from the seed.
+- **Styling follows Eneba's layout and colors**, measured from the site. The
+  logo, artwork and other companies' marks are not copied.
+
+## Architecture
+
+```
+browser ── React app (static files on Vercel)
+              │  REST, JSON, same origin (/api/...)
+              ▼
+           Go API (one Vercel serverless function)
+              │  SQL over a pooled connection
+              ▼
+           PostgreSQL (Neon)          Stripe ── webhook ──▶ Go API
+```
+
+- **One Go router, two entry points.** `backend/httpapi` builds a standard
+  `net/http` handler. `api/index.go` runs it on Vercel and `cmd/server` runs
+  it as an ordinary server, locally or on any host.
+- **Standard library first.** Routing is `net/http`. There is no web
+  framework and no ORM: the SQL is written out. The Go dependencies are
+  three: `pgx` (PostgreSQL driver), `bcrypt` and `stripe-go`.
+- **Packages by subject.** `catalog`, `home`, `auth`, `checkout` and
+  `payments` each hold the SQL and rules for one area and know nothing about
+  HTTP. `httpapi` turns requests into calls to them.
+- **The frontend keeps little state.** Filters, sort and page live in the
+  URL. The cart is a list of offer ids in `localStorage`, and prices are
+  asked from the server every time. Plain CSS, with design values in one
+  file.
+- **Sessions are cookies**: a random token in an `HttpOnly`, `Secure`,
+  `SameSite=Lax` cookie, with only its hash in the database.
+- **Migrations are plain `.sql` files** applied by a small runner in
+  `cmd/migrate`.
+- **Cover and banner pictures are static files** in `frontend/public`,
+  served by Vercel's CDN and cached for a year. A title without a picture
+  falls back to a cover the API draws as SVG.
+
+```
+api/index.go      entry point on Vercel
+cmd/server/       entry point for local runs
+cmd/migrate/      applies the .sql files in migrations/
+cmd/seed/         fills the database with the invented catalog
+migrations/       the database schema, one file per step
+backend/          catalog, home, auth, checkout, payments, httpapi
+frontend/src/     api, lib, state, components, blocks, pages, styles
+docs/             chat log, design reference, art prompts, screenshots
+```
 
 ## Run it locally
 
-Needs Go 1.22 or newer and Node 20 or newer.
+Needs Go 1.27, Node 24 and a PostgreSQL database with the `pg_trgm`
+extension available. I used a free Neon database.
 
 ```
-cp .env.example .env        # then put your two Neon connection strings in .env
+cp .env.example .env        # then put your connection strings in .env
 go run ./cmd/migrate        # create the tables
 go run ./cmd/seed           # fill them with the invented catalog
 go run ./cmd/server         # API on http://localhost:8080
@@ -32,161 +151,88 @@ npm install
 npm run dev                 # site on http://localhost:5173
 ```
 
-The homepage is built from blocks the API sends. The catalog is at `/store`,
-and `/api/health` reports whether the API can reach the database.
+Locally, payment is simulated: the order page has a "Pay (test)" button and
+a "Simulate a declined card" button, so no Stripe account is needed.
+`.env.example` explains the Stripe settings and the others.
 
-## About the data
-
-Everything in the shop is invented for this project and created by
-`cmd/seed`: the games, the sellers, the prices and the keys.
-
-Two things on the homepage look like facts and are not:
-
-- **Best sellers.** The "units sold" behind the ranking are random numbers
-  from the seed. Nothing was sold.
-- **Deals.** The seed picks eight offers, records their price as the "was"
-  price and lowers the real price by 15 to 40 percent. No price was ever
-  higher. Their end dates are real and spread over about 60 days from the day
-  the seed ran, so the block empties out over time. When a deal ends, its
-  price does not go back up by itself.
-
-## Accounts
-
-Sign up with any email and a password of at least 8 characters. Nothing is
-sent to the address, so it does not have to be a real one.
-
-A demo account also exists:
-
-| Email | Password |
-|---|---|
-| `demo@keybay.test` | `keybay-demo-2026` |
-
-These credentials are public on purpose. If the demo account misbehaves for
-any reason, create your own account instead: it takes ten seconds.
-
-How it is protected (the reasons are in DECISIONS.md, entries 49 to 56):
-
-- Passwords are stored as bcrypt hashes.
-- The session is a random token in an `HttpOnly`, `Secure`, `SameSite=Lax`
-  cookie. The database holds only a hash of it. Sessions last 7 days and
-  signing out ends them on the server.
-- Requests that change something must come from the site itself and be JSON.
-- Failed sign-ins are limited per email and per IP address.
-- A failed sign-in does not say whether the email exists.
-
-What is not built: email verification, password reset, changing a password,
-deleting an account, two-factor login. Signing up with an email that is
-already registered says so, which does reveal that the account exists.
-
-## Buying something
-
-Add an offer to the cart from a product page, go to checkout (you will be
-asked to sign in), place the order and pay. After paying, the keys are on the
-order page and stay in your order history.
-
-**On the live site you pay through Stripe in test mode.** No real money
-moves. On Stripe's page choose "Card" and use:
-
-| Card number | What happens |
-|---|---|
-| `4242 4242 4242 4242` | the payment succeeds |
-| `4000 0000 0000 0002` | the card is declined |
-
-Any future expiry date, any three digits and any name work. Back on the
-order page it says "Confirming your payment" for a few seconds, then shows
-the keys.
-
-**Run locally, payment is simulated** unless you set up Stripe: the order
-page has a "Pay (test)" button and a "Simulate a declined card" button.
-
-- Placing an order holds its keys for 15 minutes. Going to Stripe's page
-  extends that to 36 minutes, because Stripe keeps a payment page open for at
-  least 30. If the order is not paid by then, it expires and the keys go
-  back on sale.
-- A payment that arrives after its order has expired is refunded
-  automatically.
-- A key cannot be sold twice. The tests that check this start 20 buyers at
-  the same instant against a real database (`backend/checkout/`).
-- If someone else is holding the last key in an unpaid order, you are told
-  it is out of stock, even though it may come back if they do not pay.
-
-- On the live demo, stock is topped up automatically so the store cannot be
-  bought empty. Paying is free there and the demo password is public, so
-  without this anyone could buy every key. When a sale leaves an offer with
-  fewer than 3 keys, 5 new ones are generated. The setting is `DEMO_RESTOCK`,
-  and it is off by default and in the tests.
-
-Not built: emailing the keys, refunds, cancelling an order, invoices, tax,
-checkout without an account. Keys are stored unencrypted.
-
-## Search
-
-The search box in the header works from every page. It tolerates typos and
-partial words: `circut` finds "Circuit Breakers", `forge` finds "Mythforge
-Legends", `kart xbox` finds the Xbox edition of "Thunder Circuit Kart".
-
-What it does not do:
-
-- Fix a typo in a word of three letters or fewer (`vwo` for "vow").
-- Fix swapped letters in a short word (`krat` for "kart", `rouge` for
-  "rogue").
-- Understand meaning. It searches product names, so `racing` does not find a
-  racing game.
-
-## Tests
+## Tests and checks
 
 ```
-go test -p 1 ./...
+go test -p 1 ./...                  # 86 Go tests
+cd frontend && npm test             # 72 frontend unit tests
 ```
 
-Tests that need a database use `DATABASE_URL` from `.env` and expect the seed
-data. Without a database they are skipped. `-p 1` runs one package at a time:
-the packages share that database, and the checkout tests add a temporary
-product that the catalog tests would otherwise count.
+The Go tests that need a database use `DATABASE_URL` from `.env` and expect
+the seed data. `-p 1` runs one package at a time, because the packages share
+that database.
 
-```
-cd frontend && npm test
-```
+Every push runs `.github/workflows/ci.yml`: formatting, `go vet`,
+`govulncheck`, the migrations and seed on an empty PostgreSQL, the Go tests
+with the race detector, then the frontend lint, tests and build.
 
-Frontend unit tests (Vitest) for small pieces of logic such as price
-formatting and the deals countdown.
+## Known limitations
 
-## Checks
+**Checkout**
 
-Every push and pull request runs `.github/workflows/ci.yml` on GitHub:
-formatting, `go vet`, `govulncheck`, the migrations and seed on an empty
-database, the Go tests, then the frontend lint, tests and build.
+- Expired orders are cleaned up when someone next places or pays an order,
+  not by a timer. On a quiet site, stock held by an abandoned order can stay
+  held past its deadline until then.
+- If someone holds the last key in an unpaid order, others are told it is
+  out of stock, although it may come back.
+- A buyer cannot cancel an order or ask for a refund. Keys are not emailed.
+  There are no invoices and no tax.
+- Keys are stored unencrypted.
+- Only card payments were tested, though Stripe's page offers other methods.
+- On the live demo, stock is topped up automatically after a sale
+  (`DEMO_RESTOCK`). The demo login is public, so otherwise anyone could buy
+  the store empty.
 
-To run the same checks locally:
+**Search**
 
-```
-gofmt -l . && go vet ./... && go test -p 1 ./...
-go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-cd frontend && npm run lint && npm test && npm run build
-```
+- It does not fix a typo in a word of three letters or fewer, or swapped
+  letters in a short word (`krat` for "kart").
+- It searches product names only, so `racing` does not find a racing game.
+- It scans every product. That is fine for 56 and would need an index and a
+  different query for a large catalog.
 
-To see the site with production's security headers (they are defined in
-`vercel.json`), build it and use preview mode instead of the dev server:
+**Accounts**
 
-```
-cd frontend && npm run build && npm run preview    # http://localhost:4173
-```
+- No email verification and no password reset. Both need the site to send
+  email, and the project has no email service by choice. So an email here
+  proves nothing about who owns it, and a forgotten password means a new
+  account.
+- The name and the marketing choice can be changed on the account page. The
+  email and the password cannot, and an account cannot be deleted.
+- The marketing checkbox stores a choice. Nothing is ever sent.
+- The Terms and Privacy pages are demo text, and say so.
+- Signing up with a registered email says so, which reveals that the account
+  exists.
+- The demo account is shared. Anyone who uses it sees its orders and keys.
 
-Signing in on plain `http://localhost` needs `INSECURE_COOKIES=1` in `.env`
-(it is in `.env.example`). Without it the session cookie requires HTTPS.
+**Everything else**
 
-If port 8080 is taken, start the API on another port and tell the frontend:
-`PORT=8090 go run ./cmd/server`, then `API_URL=http://localhost:8090 npm run dev`.
+- The API runs as a serverless function, so the first request after a quiet
+  period is slower.
+- The cart lives in one browser and does not follow you to another device.
+- A deal's price does not go back up when the deal ends, and the deals block
+  empties over about 60 days from the last seed.
+- The browser checks I ran (pages, purchase, Stripe) were scripted by hand
+  in Chromium. They are not part of CI, and I did not test other browsers or
+  a screen reader.
+- The art was checked by eye for text, logos and likeness to existing
+  games, and nine images were redone. That check cannot rule out a likeness
+  to work I do not know.
+- English and euros only.
 
-## Layout
+## More
 
-```
-api/index.go      entry point on Vercel (serverless function)
-cmd/server/       entry point for local runs and for Render
-cmd/migrate/      applies the .sql files in migrations/
-cmd/seed/         fills the database with invented products
-migrations/       the database schema, one file per step
-backend/          the API: config, database pool, catalog, homepage, accounts, checkout, Stripe, HTTP routes
-frontend/         React app (Vite)
-docs/             chat log and design reference
-```
+- [PLAN.md](PLAN.md): scope, data model and API, written before building.
+- [DECISIONS.md](DECISIONS.md): 92 numbered choices, each with its
+  alternatives and the reason. Start here for "why did you do it this way".
+- [docs/chat-log.md](docs/chat-log.md): the full AI chat history, as the
+  brief asks.
+- [docs/design-reference.md](docs/design-reference.md): the colors and sizes
+  measured from eneba.com.
+- [docs/cover-art.md](docs/cover-art.md): how each cover and banner was
+  generated.
+- [docs/screenshots/](docs/screenshots/): the site at each phase.
