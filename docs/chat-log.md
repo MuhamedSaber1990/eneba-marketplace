@@ -5019,3 +5019,282 @@ with the race detector, then the frontend lint, tests and build.
    - **Go gets more room,** since it is the language you are newest to.
 
    Say if you want it in a different order, shorter, or all in one go.
+
+
+### Prompt 42
+
+````text
+README is good. One addition near the top, right under the first paragraph: a plain sentence saying I built it working with an AI coding agent (Claude Code), and that the whole conversation is in docs/chat-log.md as the brief asks. I don't want anyone to find that out only at the bottom. Then commit and push it.
+
+Walkthrough: yes, by area like you suggested, one area per message so I can take it in. Backend first, and give Go the extra room. End each part with your questions and wait for my answers before showing yours. Ask the hard ones, the "why not X" and "what breaks at scale" kind.
+
+Start with the first backend part after the push.
+````
+
+### Reply 48
+
+The README is committed and pushed with your sentence in the second paragraph: "I built it working with an AI coding agent, Claude Code. The whole conversation, every prompt of mine and every reply, is in docs/chat-log.md, as the brief asks."
+
+Here is the first part of the walkthrough.
+
+# Walkthrough, backend part 1: how a request gets in
+
+This part covers the plumbing: the two ways the program starts, how it reads its settings, how it reaches the database, and how a request finds its handler. No business rules yet. Seven files:
+
+| File | What it is |
+|---|---|
+| `cmd/server/main.go` | starts the API as an ordinary server (local runs) |
+| `api/index.go` | starts the API on Vercel |
+| `backend/config/dotenv.go` | reads `.env` |
+| `backend/db/db.go`, `direct.go` | opens the database |
+| `backend/httpapi/router.go` | the list of routes, and `needsDB` |
+| `backend/httpapi/json.go` | the three functions that write answers |
+| `backend/httpapi/health.go` | `/api/health` |
+
+## 1. Two front doors, one house
+
+The API can start in two ways, and both end at the same line:
+
+```go
+httpapi.NewRouter(pool, httpapi.ConfigFromEnv())
+```
+
+**`cmd/server/main.go`** is a normal program. `package main` and `func main()` are what Go runs when you type `go run ./cmd/server`. It loads `.env`, opens the database pool, builds the router, and listens on a port until you stop it.
+
+**`api/index.go`** is what Vercel runs. Vercel does not want a program that listens. It wants a function it can call once per request:
+
+```go
+func Handler(w http.ResponseWriter, r *http.Request)
+```
+
+So that file is `package handler`, has no `main`, and exports `Handler`. In Go a name that starts with a capital letter is exported, meaning other packages can see it. That is the whole visibility system: `Handler` is public, `router` is private to the file's package.
+
+**Why this matters:** every route, check and rule lives in `backend/httpapi`. Neither entry point knows any of them. If the two files each registered routes, the local server and the live site could drift apart and you would test one thing and ship another.
+
+## 2. `sync.Once`: build it once, reuse it
+
+In `api/index.go`:
+
+```go
+var (
+	router http.Handler
+	once   sync.Once
+)
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	once.Do(func() {
+		pool, err := db.Connect(context.Background())
+		...
+		router = httpapi.NewRouter(pool, httpapi.ConfigFromEnv())
+	})
+	router.ServeHTTP(w, r)
+}
+```
+
+Vercel starts an instance of the function, and that instance then serves many requests, sometimes several at once. `once.Do(f)` runs `f` exactly one time, however many requests arrive together, and makes the others wait until it is done. After that it does nothing.
+
+Without it, every request would build a new router and a new database pool. The first request to a fresh instance is the "cold start": it pays for starting the program and for `once.Do`. The rest are fast.
+
+Two Go details in those lines:
+- `pool, err := ...` A Go function can return several values, and the convention is that the last one is an `error`. There are no exceptions. You check `err` right there, every time. `:=` declares the variables and assigns them in one step.
+- `func() { ... }` is a function with no name, written in place. It can use the variables around it (`router`). That is a closure, and it comes back in the middleware below.
+
+## 3. Settings come from the environment
+
+`ConfigFromEnv()` reads environment variables and returns a `Config` struct: insecure cookies or not, restock or not, payment mode, the Stripe gateway. Both entry points call it, so they cannot disagree.
+
+`config.LoadDotEnv(".env")` exists only for local runs. It reads `KEY=VALUE` lines and sets them as environment variables, and it does not overwrite a variable that is already set, so a real environment variable always wins. On Vercel there is no `.env` file, and the function returns at the first line. It is about 25 lines, which is why there is no dotenv library.
+
+One line in it shows `defer`:
+
+```go
+file, err := os.Open(path)
+if err != nil {
+	return
+}
+defer file.Close()
+```
+
+`defer` means "run this when the surrounding function returns, whichever way it returns". You write the cleanup next to the thing it cleans up, and cannot forget it on an early return. You will see it after every `rows` and every transaction.
+
+## 4. The database pool
+
+`db.Connect` returns a `*pgxpool.Pool`. A pool keeps a few connections open and lends one out per query. Opening a connection costs a network round trip and a TLS handshake, so you do not want one per request.
+
+Three decisions are in this file:
+
+**The pool holds at most 4 connections.** On Vercel, every instance of the function has its own pool, and under load there can be many instances. Four each keeps the total down.
+
+**`QueryExecModeExec`.** The API talks to Neon through its pooler (PgBouncer), which shares real database connections between many clients. By default pgx prepares a statement on one connection and reuses it by name. Through the pooler, your next query can land on a different real connection, where that prepared statement does not exist. Exec mode sends the SQL and its parameters together every time and prepares nothing.
+
+**Two addresses.** The API uses the pooled address (`DATABASE_URL`). The migrate and seed commands use the direct one (`DATABASE_URL_UNPOOLED`) through `ConnectDirect`, because schema changes and long transactions do not belong on a shared connection. `ConnectDirect` refuses to run if you hand it the pooled host by mistake, and it returns a short label for the database. That label is the `ep-restless-union-...` line you saw before every production run.
+
+**The pool can be `nil`.** If `DATABASE_URL` is missing, `Connect` returns an error. `main` logs it and keeps going with a nil pool. The health check then says "not configured", and every other route answers 503 through `needsDB`. The program does not crash.
+
+A word on the `*` in `*pgxpool.Pool`: it is a pointer, the address of a value and not a copy of it. A pool has to be shared, so everything holds a pointer to the one pool. `nil` is the pointer that points at nothing.
+
+## 5. The router
+
+`NewRouter` does two things.
+
+**It builds an `API` value** that carries what handlers need:
+
+```go
+type API struct {
+	db       *pgxpool.Pool
+	config   Config
+	catalog  *catalog.Store
+	home     *home.Store
+	auth     *auth.Store
+	checkout *checkout.Store
+}
+```
+
+Handlers are methods on it:
+
+```go
+func (api *API) handleHealth(w http.ResponseWriter, r *http.Request)
+```
+
+The `(api *API)` before the name is the receiver. It makes the function a method, and inside it `api.db` and `api.catalog` are available. This is how the handlers reach the database without any global variable, and how the tests can build a router around a test database.
+
+**It registers the routes** on Go's own router, `http.ServeMux`:
+
+```go
+mux.HandleFunc("GET /api/products/{slug}", api.needsDB(api.handleGetProduct))
+```
+
+Since Go 1.22 the pattern can contain the method and a wildcard. `{slug}` is read in the handler with `r.PathValue("slug")`. A `POST` to that address gets a 405 from the router with no code from us. That feature is why there is no router library.
+
+The last route, `/api/`, catches everything unknown under `/api` and answers 404 as JSON, so the frontend can parse every answer the same way.
+
+## 6. Middleware: functions that wrap functions
+
+Look at one route:
+
+```go
+mux.HandleFunc("POST /api/orders", api.needsDB(sameOrigin(api.requireUser(api.handleCreateOrder))))
+```
+
+Each wrapper takes a handler and returns a new handler that checks something first:
+
+```go
+func (api *API) needsDB(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if api.db == nil {
+			writeError(w, http.StatusServiceUnavailable, "the database is not configured")
+			return
+		}
+		next(w, r)
+	}
+}
+```
+
+The function it returns is a closure: it remembers `next` and `api`. If the check fails, it answers and returns, and `next` never runs. If it passes, it calls `next`.
+
+**The order is outside in.** For the route above:
+1. `needsDB`: is there a database at all?
+2. `sameOrigin`: did this request come from our own site? (the protection against forged cross-site requests, covered in the accounts part)
+3. `requireUser`: is there a valid session? If so, put the user into the request.
+4. the handler.
+
+**How `requireUser` hands the user on.** It stores the user in the request's `context`, and the handler reads it back with `currentUser(r)`:
+
+```go
+type userKey struct{}
+
+next(w, r.WithContext(context.WithValue(r.Context(), userKey{}, user)))
+
+func currentUser(r *http.Request) auth.User {
+	return r.Context().Value(userKey{}).(auth.User)
+}
+```
+
+A context is a bag that travels with one request. The key is a private type of its own, `userKey{}`, so no other package can read or overwrite the value by accident. The `.(auth.User)` at the end is a type assertion: the bag holds values of unknown type, and this says "it is an `auth.User`". If it is not, the program panics. That is why the comment says to call it only inside `requireUser`.
+
+**The same context carries cancellation.** Handlers pass `r.Context()` to every database call. If the visitor closes the tab, the context is cancelled and the query stops. That is what the `context.Canceled` check in `serverError` is about.
+
+**Routes that exist only in one payment mode** use the same trick: `simulatedOnly` and `stripeOnly` answer 404 in the other mode, as if the route were not there.
+
+## 7. Writing answers
+
+Three small functions in `json.go`:
+
+- `writeJSON(w, status, body)` turns any Go value into JSON. `body any` means "a value of any type".
+- `writeError(w, status, message)` always writes `{"error": "..."}`. One shape for every failure.
+- `serverError(w, r, err)` is for failures that are our fault. The details go to the server log. The visitor gets "something went wrong on our side" and nothing about tables or SQL.
+
+How a struct becomes JSON is decided by the tags on its fields:
+
+```go
+type healthResponse struct {
+	Status   string `json:"status"`
+	Database string `json:"database"`
+}
+```
+
+The text in backticks is a struct tag. `json:"status"` says "call this field `status` in JSON". Only exported fields (capital letter) are written at all.
+
+## 8. The health check
+
+`GET /api/health` runs `SELECT 1` with a 5-second limit:
+
+```go
+ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+defer cancel()
+```
+
+It answers 200 `{"status":"ok","database":"ok"}`, or 503 with `"not configured"` or `"unreachable"`. The five seconds are there because Neon's free tier puts an idle database to sleep and the first query has to wake it.
+
+It is the one route not wrapped in `needsDB`, because reporting a missing database is its job.
+
+## 9. The server's time limits
+
+In `cmd/server/main.go`:
+
+```go
+server := &http.Server{
+	ReadHeaderTimeout: 5 * time.Second,
+	ReadTimeout:       10 * time.Second,
+	WriteTimeout:      30 * time.Second,
+	IdleTimeout:       60 * time.Second,
+}
+```
+
+The short way, `http.ListenAndServe`, has no limits at all, so one client that connects and then sends nothing could hold a connection forever. `&http.Server{...}` builds a server value with limits and takes its address in one step.
+
+## One request, start to finish
+
+`GET /api/products/hollow-tide-steam-key-global` on the live site:
+
+1. Vercel sees `/api/...` and, by the rewrite in `vercel.json`, calls `Handler` in `api/index.go`.
+2. `once.Do` has already run, so `router.ServeHTTP(w, r)` is called straight away.
+3. The mux matches `GET /api/products/{slug}`.
+4. `needsDB` sees a pool and calls the handler.
+5. The handler reads `r.PathValue("slug")`, calls `api.catalog.Get(r.Context(), slug)`, and writes the result with `writeJSON`.
+
+Everything past step 5 is the next part.
+
+## Questions
+
+Answer in your own words, as short as you like. I will give my answers after yours.
+
+1. **Why not one entry point?** The project has two files that start the API. An interviewer says: "That is duplication. Why not just deploy `cmd/server`?" What do you say, and what exactly would go wrong if `api/index.go` registered a few routes of its own?
+
+2. **`sync.Once`.** Three requests reach a brand-new Vercel instance in the same millisecond. Walk through what each of them does. What would happen with a plain `if router == nil { ... }` in its place?
+
+3. **The pool is 4 connections per instance. What breaks at scale?** Say a sale brings 300 function instances at once. What is the limit you hit first, what does the visitor see, and what are two things you could do about it?
+
+4. **Why `QueryExecModeExec`, and what does it cost?** Why can the default mode fail through Neon's pooler? What do you give up by never preparing statements?
+
+5. **Middleware order.** For `needsDB(sameOrigin(requireUser(handler)))`: which check runs first, and why is `sameOrigin` before `requireUser` and not after? Would anything be unsafe if they were swapped, or is it only a matter of cost?
+
+6. **Why not a framework?** "Everyone uses Gin or Chi. Why `net/http`?" Give the honest answer, including one thing you would miss as the API grows.
+
+7. **A nil pool.** When `DATABASE_URL` is missing, the server starts anyway and answers 503. Why not crash at startup, which is what many people would do? When would crashing be the better choice?
+
+8. **`currentUser` can panic.** It does a type assertion with no check. Why is that acceptable here? How would you change it if you did not trust every future route to be wrapped correctly?
+
+9. **The time limits in `cmd/server/main.go` do not apply on the live site.** Why not? What limits a slow request there?
+
+10. **`serverError` tells the visitor nothing.** A teammate says that makes bugs hard to report. What is the risk in returning the real error, and how do you find the cause of a 500 on the live site today?
