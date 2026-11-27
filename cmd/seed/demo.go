@@ -25,7 +25,10 @@ func seedDemoUser(ctx context.Context, tx pgx.Tx) error {
 		return err
 	}
 	_, err = tx.Exec(ctx,
-		"INSERT INTO users (email, password_hash, is_demo) VALUES ($1, $2, true)",
+		// The demo account never goes through the sign-up form, so it has
+		// no terms_accepted_at. Its name matches what migration 008 gives
+		// a demo account that existed before it.
+		"INSERT INTO users (email, password_hash, name, is_demo) VALUES ($1, $2, 'Demo Player', true)",
 		demoEmail, hash)
 	if err != nil {
 		return fmt.Errorf("inserting the demo account: %w", err)

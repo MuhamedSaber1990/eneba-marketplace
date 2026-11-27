@@ -30,6 +30,33 @@ var (
 type User struct {
 	ID    int64  `json:"id"`
 	Email string `json:"email"`
+	Name  string `json:"name"`
+	// MarketingOptIn is the "send me news about deals" choice. Nothing is
+	// ever sent: it is a preference the account page shows and can change.
+	MarketingOptIn bool `json:"marketing_opt_in"`
+}
+
+// userColumns are the columns that make up a User, in the order scanUser
+// reads them. Every query that returns a user selects exactly these.
+const userColumns = "u.id, u.email, u.name, u.marketing_opt_in"
+
+// scanUser reads one row selected with userColumns, plus any extra columns
+// selected after them.
+func scanUser(row pgx.Row, extra ...any) (User, error) {
+	var user User
+	dest := append([]any{&user.ID, &user.Email, &user.Name, &user.MarketingOptIn}, extra...)
+	err := row.Scan(dest...)
+	return user, err
+}
+
+// SignUpInput is everything the sign-up form sends.
+type SignUpInput struct {
+	Name            string
+	Email           string
+	Password        string
+	PasswordConfirm string
+	AcceptTerms     bool
+	MarketingOptIn  bool
 }
 
 // Store runs the account queries.
@@ -44,14 +71,24 @@ func NewStore(db *pgxpool.Pool) *Store {
 // SignUp creates an account and signs it in. It returns the user and the
 // session token for the cookie. ip is the address the request came from,
 // used only for the sign-up limit.
-func (s *Store) SignUp(ctx context.Context, email, password, ip string) (User, string, error) {
-	email = NormalizeEmail(email)
+func (s *Store) SignUp(ctx context.Context, input SignUpInput, ip string) (User, string, error) {
+	// Every check the form makes is made again here. The form can be
+	// skipped by sending the request directly; this cannot.
+	name := NormalizeName(input.Name)
+	if err := ValidateName(name); err != nil {
+		return User{}, "", err
+	}
+	email := NormalizeEmail(input.Email)
 	if err := ValidateEmail(email); err != nil {
 		return User{}, "", err
 	}
-	if err := ValidatePassword(password); err != nil {
+	if err := ValidateNewPassword(email, input.Password, input.PasswordConfirm); err != nil {
 		return User{}, "", err
 	}
+	if !input.AcceptTerms {
+		return User{}, "", ValidationError{"You need to agree to the Terms and the Privacy Policy to create an account."}
+	}
+	password := input.Password
 
 	// Every sign-up from an address counts, successful or not, so the limit
 	// also slows down someone testing which emails are registered.
@@ -71,10 +108,14 @@ func (s *Store) SignUp(ctx context.Context, email, password, ip string) (User, s
 		return User{}, "", err
 	}
 
-	user := User{Email: email}
-	err = s.db.QueryRow(ctx,
-		"INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
-		email, hash,
+	// terms_accepted_at is the moment of signing up: the lines above refused
+	// anyone who did not tick the box. now() is the database's clock.
+	user := User{Email: email, Name: name, MarketingOptIn: input.MarketingOptIn}
+	err = s.db.QueryRow(ctx, `
+		INSERT INTO users (email, password_hash, name, terms_accepted_at, marketing_opt_in)
+		VALUES ($1, $2, $3, now(), $4)
+		RETURNING id`,
+		email, hash, name, input.MarketingOptIn,
 	).Scan(&user.ID)
 	if isUniqueViolation(err) {
 		return User{}, "", ErrEmailTaken
@@ -109,12 +150,11 @@ func (s *Store) SignIn(ctx context.Context, email, password, ip string) (User, s
 	email = NormalizeEmail(email)
 
 	// Look the account up first. No row is not an error here.
-	var user User
 	var hash string
 	var isDemo bool
-	err := s.db.QueryRow(ctx,
-		"SELECT id, email, password_hash, is_demo FROM users WHERE email = $1", email,
-	).Scan(&user.ID, &user.Email, &hash, &isDemo)
+	user, err := scanUser(s.db.QueryRow(ctx,
+		"SELECT "+userColumns+", u.password_hash, u.is_demo FROM users u WHERE u.email = $1", email,
+	), &hash, &isDemo)
 	found := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return User{}, "", fmt.Errorf("loading the user: %w", err)
@@ -164,6 +204,29 @@ func (s *Store) SignIn(ctx context.Context, email, password, ip string) (User, s
 		return User{}, "", err
 	}
 	return user, token, nil
+}
+
+// UpdateProfile changes the two things a person can change about their
+// account: the name and the marketing choice. It returns the account as it
+// now is.
+//
+// userID comes from the session, never from the request body, so a person
+// can only ever change their own account.
+func (s *Store) UpdateProfile(ctx context.Context, userID int64, name string, marketingOptIn bool) (User, error) {
+	name = NormalizeName(name)
+	if err := ValidateName(name); err != nil {
+		return User{}, err
+	}
+	user, err := scanUser(s.db.QueryRow(ctx, `
+		UPDATE users u
+		   SET name = $2, marketing_opt_in = $3
+		 WHERE u.id = $1
+		RETURNING `+userColumns,
+		userID, name, marketingOptIn))
+	if err != nil {
+		return User{}, fmt.Errorf("updating the profile: %w", err)
+	}
+	return user, nil
 }
 
 // isUniqueViolation reports whether err is PostgreSQL refusing a row because

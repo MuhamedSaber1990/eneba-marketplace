@@ -93,6 +93,7 @@ func NewRouter(db *pgxpool.Pool, config Config) http.Handler {
 	mux.HandleFunc("POST /api/auth/signin", api.needsDB(sameOrigin(api.handleSignIn)))
 	mux.HandleFunc("POST /api/auth/signout", api.needsDB(sameOrigin(api.handleSignOut)))
 	mux.HandleFunc("GET /api/auth/me", api.needsDB(api.handleMe))
+	mux.HandleFunc("POST /api/account", api.needsDB(sameOrigin(api.requireUser(api.handleUpdateAccount))))
 
 	// Checkout. Pricing a cart is public. Everything about orders needs a
 	// signed-in user, and the POSTs must come from the site itself.

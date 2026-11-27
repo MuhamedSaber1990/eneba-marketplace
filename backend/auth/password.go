@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
@@ -15,6 +16,8 @@ const (
 	// passwords open the same account.
 	maxPasswordBytes = 72
 	maxEmailLength   = 254
+	// The same limit as the CHECK on users.name in the database.
+	maxNameChars = 60
 )
 
 // bcryptCost sets how slow hashing is. Each step up doubles the work. 12
@@ -61,6 +64,53 @@ func ValidatePassword(password string) error {
 	}
 	if len(password) > maxPasswordBytes {
 		return ValidationError{fmt.Sprintf("The password can be at most %d bytes long.", maxPasswordBytes)}
+	}
+	return nil
+}
+
+// ValidateNewPassword checks a password someone is choosing: the length
+// rules, that it is not simply their email address, and that they typed the
+// same thing twice.
+//
+// The sign-up form shows these same three rules as the visitor types
+// (frontend/src/lib/passwordRules.ts). The form is a convenience. This
+// function is the check that counts, because a request can be sent without
+// the form.
+func ValidateNewPassword(email, password, confirmation string) error {
+	if err := ValidatePassword(password); err != nil {
+		return err
+	}
+	// An email is public. Used as the password, it is the first thing
+	// anyone would try.
+	if strings.EqualFold(strings.TrimSpace(password), NormalizeEmail(email)) {
+		return ValidationError{"The password cannot be your email address."}
+	}
+	if password != confirmation {
+		return ValidationError{"The two passwords do not match."}
+	}
+	return nil
+}
+
+// NormalizeName trims a name and turns any run of spaces, tabs or line
+// breaks inside it into one space: "  Layla   Hassan " becomes "Layla Hassan".
+func NormalizeName(name string) string {
+	return strings.Join(strings.Fields(name), " ")
+}
+
+// ValidateName checks a normalized name: something, not too long, and no
+// invisible control characters. Letters of any alphabet, apostrophes,
+// hyphens and the like are all fine. People's names are not ours to restrict.
+func ValidateName(name string) error {
+	switch {
+	case name == "":
+		return ValidationError{"Enter your name."}
+	case utf8.RuneCountInString(name) > maxNameChars:
+		return ValidationError{fmt.Sprintf("The name can be at most %d characters.", maxNameChars)}
+	}
+	for _, character := range name {
+		if unicode.IsControl(character) {
+			return ValidationError{"The name contains a character that cannot be used."}
+		}
 	}
 	return nil
 }

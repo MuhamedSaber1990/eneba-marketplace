@@ -32,6 +32,22 @@ type credentials struct {
 	Password string `json:"password"`
 }
 
+// signUpRequest is the sign-up form as JSON.
+type signUpRequest struct {
+	Name            string `json:"name"`
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	PasswordConfirm string `json:"password_confirm"`
+	AcceptTerms     bool   `json:"accept_terms"`
+	MarketingOptIn  bool   `json:"marketing_opt_in"`
+}
+
+// profileRequest is the account page's form as JSON.
+type profileRequest struct {
+	Name           string `json:"name"`
+	MarketingOptIn bool   `json:"marketing_opt_in"`
+}
+
 func (api *API) cookieName() string {
 	if api.config.InsecureCookies {
 		return insecureCookieName
@@ -188,14 +204,27 @@ func noStore(w http.ResponseWriter) {
 }
 
 // handleSignUp creates an account and signs it in.
-// POST /api/auth/signup  {"email": "...", "password": "..."}
+//
+//	POST /api/auth/signup
+//	{"name": "...", "email": "...", "password": "...", "password_confirm": "...",
+//	 "accept_terms": true, "marketing_opt_in": false}
+//
+// A field left out of the JSON arrives as its empty value: "" or false. So
+// a request without accept_terms is a request that did not accept them.
 func (api *API) handleSignUp(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
-	creds, ok := readCredentials(w, r)
-	if !ok {
+	var form signUpRequest
+	if !readJSON(w, r, &form) {
 		return
 	}
-	user, token, err := api.auth.SignUp(r.Context(), creds.Email, creds.Password, clientIP(r))
+	user, token, err := api.auth.SignUp(r.Context(), auth.SignUpInput{
+		Name:            form.Name,
+		Email:           form.Email,
+		Password:        form.Password,
+		PasswordConfirm: form.PasswordConfirm,
+		AcceptTerms:     form.AcceptTerms,
+		MarketingOptIn:  form.MarketingOptIn,
+	}, clientIP(r))
 	if writeAuthError(w, r, err) {
 		return
 	}
@@ -216,6 +245,23 @@ func (api *API) handleSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.setSessionCookie(w, token)
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+}
+
+// handleUpdateAccount changes the signed-in user's name and marketing choice.
+// It is wrapped in requireUser, so the user is the one the session belongs
+// to. The request cannot name a different account.
+// POST /api/account  {"name": "...", "marketing_opt_in": false}
+func (api *API) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	var form profileRequest
+	if !readJSON(w, r, &form) {
+		return
+	}
+	user, err := api.auth.UpdateProfile(r.Context(), currentUser(r).ID, form.Name, form.MarketingOptIn)
+	if writeAuthError(w, r, err) {
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 

@@ -199,10 +199,35 @@ func credentialsJSON(email, password string) string {
 	return string(body)
 }
 
+// signUpForm is the sign-up form as a test fills it in. validSignUp returns
+// one that passes every rule; a test then breaks the one field it is about.
+type signUpForm struct {
+	Name            string `json:"name"`
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	PasswordConfirm string `json:"password_confirm"`
+	AcceptTerms     bool   `json:"accept_terms"`
+	MarketingOptIn  bool   `json:"marketing_opt_in"`
+}
+
+func validSignUp(email, password string) signUpForm {
+	return signUpForm{Name: "Test Person", Email: email, Password: password, PasswordConfirm: password, AcceptTerms: true}
+}
+
+func (f signUpForm) json() string {
+	body, _ := json.Marshal(f)
+	return string(body)
+}
+
+// signUpJSON is a complete, valid sign-up for this email and password.
+func signUpJSON(email, password string) string {
+	return validSignUp(email, password).json()
+}
+
 // signUp creates the test's account and returns its session cookie.
 func (at *authTest) signUp(password string) *http.Cookie {
 	at.t.Helper()
-	w := at.post("/api/auth/signup", credentialsJSON(at.email, password), nil)
+	w := at.post("/api/auth/signup", signUpJSON(at.email, password), nil)
 	if w.Code != http.StatusCreated {
 		at.t.Fatalf("sign up: status %d, body %s", w.Code, w.Body)
 	}
@@ -226,7 +251,7 @@ func TestSignUpSignOutFlow(t *testing.T) {
 	at := newAuthTest(t)
 
 	// Sign up, with the email in mixed case to check it is normalized.
-	w := at.post("/api/auth/signup", credentialsJSON(strings.ToUpper(at.email), goodPassword), nil)
+	w := at.post("/api/auth/signup", signUpJSON(strings.ToUpper(at.email), goodPassword), nil)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("sign up: status %d, body %s", w.Code, w.Body)
 	}
@@ -375,7 +400,7 @@ func TestDuplicateEmailIsRefused(t *testing.T) {
 	at.signUp(goodPassword)
 
 	for _, email := range []string{at.email, strings.ToUpper(at.email), "  " + at.email + " "} {
-		w := at.post("/api/auth/signup", credentialsJSON(email, "another password"), nil)
+		w := at.post("/api/auth/signup", signUpJSON(email, "another password"), nil)
 		if w.Code != http.StatusConflict {
 			t.Errorf("second sign up as %q: status %d, want 409", email, w.Code)
 		}
@@ -385,19 +410,37 @@ func TestDuplicateEmailIsRefused(t *testing.T) {
 func TestSignUpValidation(t *testing.T) {
 	at := newAuthTest(t)
 
+	// Each case starts from a form that would be accepted and breaks one
+	// thing. These are the checks the sign-up page also makes in the browser.
+	// Here they are made with no browser at all, which is the point: the
+	// server must refuse on its own.
 	tests := []struct {
-		name     string
-		email    string
-		password string
+		name   string
+		break_ func(f *signUpForm)
 	}{
-		{"password too short", at.email, "1234567"},
-		{"password over 72 bytes", at.email, strings.Repeat("a", 73)},
-		{"not an email", "not-an-email", goodPassword},
-		{"empty email", "", goodPassword},
+		{"password too short", func(f *signUpForm) { f.Password, f.PasswordConfirm = "1234567", "1234567" }},
+		{"password over 72 bytes", func(f *signUpForm) {
+			f.Password, f.PasswordConfirm = strings.Repeat("a", 73), strings.Repeat("a", 73)
+		}},
+		{"not an email", func(f *signUpForm) { f.Email = "not-an-email" }},
+		{"empty email", func(f *signUpForm) { f.Email = "" }},
+		{"no name", func(f *signUpForm) { f.Name = "" }},
+		{"a name of only spaces", func(f *signUpForm) { f.Name = "   " }},
+		{"a name over 60 characters", func(f *signUpForm) { f.Name = strings.Repeat("a", 61) }},
+		{"a name with a control character", func(f *signUpForm) { f.Name = "Lay\x00la" }},
+		{"confirmation does not match", func(f *signUpForm) { f.PasswordConfirm = f.Password + "x" }},
+		{"confirmation left out", func(f *signUpForm) { f.PasswordConfirm = "" }},
+		{"password is the email", func(f *signUpForm) { f.Password, f.PasswordConfirm = f.Email, f.Email }},
+		{"password is the email in capitals", func(f *signUpForm) {
+			f.Password, f.PasswordConfirm = strings.ToUpper(f.Email), strings.ToUpper(f.Email)
+		}},
+		{"terms not accepted", func(f *signUpForm) { f.AcceptTerms = false }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := at.post("/api/auth/signup", credentialsJSON(tt.email, tt.password), nil)
+			form := validSignUp(at.email, goodPassword)
+			tt.break_(&form)
+			w := at.post("/api/auth/signup", form.json(), nil)
 			if w.Code != http.StatusBadRequest {
 				t.Errorf("status %d, want 400; body %s", w.Code, w.Body)
 			}
@@ -406,10 +449,151 @@ func TestSignUpValidation(t *testing.T) {
 			}
 		})
 	}
+
+	// A request that leaves accept_terms out altogether, as the old two-field
+	// form did, is refused as well: a missing field is false.
+	t.Run("old two-field request", func(t *testing.T) {
+		w := at.post("/api/auth/signup", credentialsJSON(at.email, goodPassword), nil)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("status %d, want 400; body %s", w.Code, w.Body)
+		}
+	})
+
+	// None of the refused requests may have created the account.
+	if w := at.post("/api/auth/signin", credentialsJSON(at.email, goodPassword), nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("sign in after only refused sign-ups: status %d, want 401", w.Code)
+	}
 }
 
-// A wrong password and an unknown email must look exactly the same from
-// outside, so the sign-in form cannot be used to find out who has an account.
+// userIn reads the "user" object from a response.
+func userIn(t *testing.T, w *httptest.ResponseRecorder) (user struct {
+	Email          string `json:"email"`
+	Name           string `json:"name"`
+	MarketingOptIn bool   `json:"marketing_opt_in"`
+}) {
+	t.Helper()
+	var body struct {
+		User *json.RawMessage `json:"user"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.User == nil {
+		t.Fatalf("no user in the response: %s", w.Body)
+	}
+	if err := json.Unmarshal(*body.User, &user); err != nil {
+		t.Fatalf("reading the user: %v", err)
+	}
+	return user
+}
+
+func TestSignUpStoresTheProfile(t *testing.T) {
+	at := newAuthTest(t)
+
+	form := validSignUp(at.email, goodPassword)
+	form.Name = "  Layla   Hassan "
+	form.MarketingOptIn = true
+	w := at.post("/api/auth/signup", form.json(), nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("sign up: status %d, body %s", w.Code, w.Body)
+	}
+	cookie := sessionCookie(t, w)
+
+	// The name comes back tidied: trimmed, inner spaces collapsed.
+	if user := userIn(t, w); user.Name != "Layla Hassan" || !user.MarketingOptIn {
+		t.Errorf("sign up answered %+v", user)
+	}
+	// "Who am I" and a later sign-in say the same.
+	if user := userIn(t, at.me(cookie)); user.Name != "Layla Hassan" || !user.MarketingOptIn {
+		t.Errorf("me answered %+v", user)
+	}
+	if user := userIn(t, at.post("/api/auth/signin", credentialsJSON(at.email, goodPassword), nil)); user.Name != "Layla Hassan" {
+		t.Errorf("sign in answered %+v", user)
+	}
+
+	// The database recorded when the terms were accepted.
+	var accepted bool
+	err := at.pool.QueryRow(context.Background(),
+		"SELECT terms_accepted_at IS NOT NULL AND terms_accepted_at > now() - interval '1 minute' FROM users WHERE email = $1",
+		at.email).Scan(&accepted)
+	if err != nil || !accepted {
+		t.Errorf("terms_accepted_at was not set to the time of signing up (err %v)", err)
+	}
+
+	// The password hash and the terms date are never part of an answer.
+	for _, secret := range []string{"password", "hash", "terms"} {
+		if strings.Contains(at.me(cookie).Body.String(), secret) {
+			t.Errorf("the answer to /api/auth/me mentions %q", secret)
+		}
+	}
+}
+
+func TestUpdateAccount(t *testing.T) {
+	at := newAuthTest(t)
+	cookie := at.signUp(goodPassword)
+	update := func(body string) *httptest.ResponseRecorder {
+		return at.post("/api/account", body, cookie)
+	}
+
+	t.Run("changes the name and the marketing choice", func(t *testing.T) {
+		w := update(`{"name": "  New   Name ", "marketing_opt_in": true}`)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status %d, body %s", w.Code, w.Body)
+		}
+		if user := userIn(t, w); user.Name != "New Name" || !user.MarketingOptIn || user.Email != at.email {
+			t.Errorf("answered %+v", user)
+		}
+		if user := userIn(t, at.me(cookie)); user.Name != "New Name" || !user.MarketingOptIn {
+			t.Errorf("me then answered %+v", user)
+		}
+	})
+
+	t.Run("refuses a bad name and changes nothing", func(t *testing.T) {
+		for _, body := range []string{
+			`{"name": "", "marketing_opt_in": false}`,
+			`{"name": "   ", "marketing_opt_in": false}`,
+			`{"name": "` + strings.Repeat("a", 61) + `", "marketing_opt_in": false}`,
+			`{"marketing_opt_in": false}`,
+		} {
+			if w := update(body); w.Code != http.StatusBadRequest {
+				t.Errorf("%s: status %d, want 400", body, w.Code)
+			}
+		}
+		if user := userIn(t, at.me(cookie)); user.Name != "New Name" || !user.MarketingOptIn {
+			t.Errorf("a refused update changed the account: %+v", user)
+		}
+	})
+
+	t.Run("cannot change the email or another account", func(t *testing.T) {
+		// Extra fields in the body are ignored. There is no way to name an
+		// account: the one changed is the one the session belongs to.
+		w := update(`{"name": "Same Person", "marketing_opt_in": false, "email": "other@example.com", "id": 1, "is_demo": true}`)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status %d, body %s", w.Code, w.Body)
+		}
+		if user := userIn(t, w); user.Email != at.email {
+			t.Errorf("the email changed to %q", user.Email)
+		}
+		var others int
+		err := at.pool.QueryRow(context.Background(),
+			"SELECT COUNT(*) FROM users WHERE name = 'Same Person' AND email <> $1", at.email).Scan(&others)
+		if err != nil || others != 0 {
+			t.Errorf("%d other accounts were renamed (err %v)", others, err)
+		}
+	})
+
+	t.Run("needs a session, the site's own origin and JSON", func(t *testing.T) {
+		body := `{"name": "Intruder", "marketing_opt_in": true}`
+		if w := at.post("/api/account", body, nil); w.Code != http.StatusUnauthorized {
+			t.Errorf("no cookie: status %d, want 401", w.Code)
+		}
+		w := at.do(request{method: "POST", path: "/api/account", body: body, cookie: cookie, origin: "https://evil.example"})
+		if w.Code != http.StatusForbidden {
+			t.Errorf("from another site: status %d, want 403", w.Code)
+		}
+		if user := userIn(t, at.me(cookie)); user.Name == "Intruder" {
+			t.Error("a refused request renamed the account")
+		}
+	})
+}
+
 func TestSignInDoesNotRevealWhetherTheEmailExists(t *testing.T) {
 	at := newAuthTest(t)
 	at.signUp(goodPassword)
