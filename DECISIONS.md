@@ -1200,3 +1200,86 @@ Agreed as a numbered list before building, like the Eneba comparison.
 - **Left alone:** the header, the filter panel, the cart layout, the
   colors, six cards per row, and editions as separate products.
 
+## 87. A sign-up that asks what a normal site asks, without an email service
+
+- **The problem:** two fields and you were in. It worked, and it did not
+  feel like a real site.
+- **Added:** a name, a second password field, the password rules shown as
+  they are met, a show/hide button, a required "I agree to the Terms and
+  Privacy Policy" checkbox, an optional marketing checkbox that starts
+  unticked, and a short welcome page before going on to wherever the visitor
+  was headed.
+- **Not added:** email verification and password reset. Both need the site
+  to send email, and the project has no email service by choice. The cost
+  is said in the README: an email here proves nothing about who owns it,
+  and a forgotten password means a new account.
+- **The welcome page is not a verification step** and does not pretend to
+  be one. It never says "check your inbox".
+- **Sign-in stays two fields.** It only gained the show/hide button.
+
+## 88. Three password rules, and no "capital, number, symbol"
+
+- **The rules:** at least 8 characters, not your email address, and the two
+  passwords match. The 72-byte upper limit from bcrypt is mentioned only
+  when someone reaches it.
+- **Why no composition rules:** current guidance (NIST SP 800-63B) advises
+  against them. People satisfy them with `Password1!`, which is no harder
+  to guess, and they make good long passphrases fail. Length is what helps.
+- **"Not your email" is the one extra rule** because the email is public
+  and is the first thing anyone would try.
+- **The alternative** was the familiar set of rules, because it looks like
+  what other sites do. Explaining why they are missing is better than
+  adding rules that do not help.
+
+## 89. The form checks for convenience, the server checks for real
+
+- **Every check the form makes, the server makes again:** the name, the
+  email, the password length, password not the email, the confirmation
+  matching, and the terms being accepted. The form sends both password
+  fields so the server can compare them itself.
+- **Why:** a request can be sent without the form. A test sends each bad
+  request straight to the API, and a browser check did the same from the
+  page with the form bypassed. All are refused with 400.
+- **A missing field is refused too.** In Go a field left out of the JSON
+  arrives as false or empty, so the old two-field request no longer creates
+  an account.
+- **The rules exist once on each side** (`backend/auth/password.go` and
+  `frontend/src/lib/passwordRules.ts`), each with tests, so they can be
+  compared when one changes.
+
+## 90. What is stored about consent, and what is not claimed
+
+- **`terms_accepted_at`** is set to the moment of signing up. The server
+  refuses a sign-up without the box ticked, so every new account has it.
+- **Accounts from before this change have it empty.** They were never shown
+  the checkbox, and the database does not say they agreed. The demo account
+  is one of them: it never passes through the sign-up form.
+- **`marketing_opt_in`** is off unless the person switched it on. Nothing
+  is ever sent. The Privacy page says so, and the account page shows the
+  choice and lets it be changed, so it is a real preference in a real field
+  and not a checkbox that goes nowhere.
+- **The Terms and Privacy pages say at the top that they are demo text,**
+  not legal documents. What they describe is true of this demo.
+
+## 91. One endpoint to change a profile, and only your own
+
+- **`POST /api/account`** changes the name and the marketing choice.
+- **Whose account** comes from the session cookie, never from the request.
+  A test sends an `id`, an `email` and `is_demo` in the body and checks that
+  none of them has any effect.
+- **Same protections as every changing request:** signed in, the site's own
+  Origin, JSON only.
+- **Email and password cannot be changed.** A new email could not be
+  verified, and changing a password safely needs the old one and ends other
+  sessions. Both are left out and listed as limitations.
+
+## 92. A column default that exists for a few minutes of deployment
+
+- **`users.name` is NOT NULL with DEFAULT 'Player'.** The new code always
+  sends a name, so the default looks pointless.
+- **Why it is there:** the migration runs on production before the new code
+  is live. In those minutes the old code still creates accounts without a
+  name. Without the default those sign-ups would fail.
+- **The order for this change:** migration first, then the push. The old
+  code ignores the new columns, and the new code needs them.
+
