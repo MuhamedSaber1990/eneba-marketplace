@@ -3849,3 +3849,24 @@ Say if you want any of them back. I cut them because a reader who opens the repo
 2. **Ok to push** the seller color fix, the README and the chat log. No migration, no Vercel change.
 
 After the README is settled, the last step is the walkthrough of the codebase file by file and the quiz. Tell me whether you want it in one sitting or split by area (backend, then frontend).
+
+
+### Prompt 32
+
+````text
+Keep the README draft uncommitted for now. I'm not happy with the design yet and I'm working out what to change. I'll come back with the changes, and the README gets updated after that.
+````
+
+### Reply 37
+
+Understood. The README draft stays as an uncommitted change in `~/eneba-marketplace/README.md`, and I will update it after the design changes.
+
+Where things stand:
+
+- **Live:** the styling pass as you saw it in the screenshots, with Stripe working.
+- **Committed locally, not pushed:** the seller color fix and the chat log entries. I will not push them until you say so.
+- **Uncommitted:** the README draft only.
+
+When you come back with the design changes, the most useful form for me is the page, what bothers you, and what you would rather see. A screenshot with a mark on it works too. I will answer with a plan before changing anything, as before.
+
+Two parts of the draft will need a second look after the design changes: the homepage screenshot at the top, and the line about styling under the shortcuts.
