@@ -20,9 +20,7 @@ export function BannerBlock({ block }: BlockProps) {
               key={banner.title}
               to={banner.link}
               className={index === 0 ? 'banner banner--large' : 'banner'}
-              // The two gradient colors come from the database. They are
-              // handed to the stylesheet as CSS variables.
-              style={{ '--banner-a': banner.color_a, '--banner-b': banner.color_b } as CSSProperties}
+              style={bannerStyle(banner)}
             >
               <span className="banner__title">{banner.title}</span>
               <span className="banner__subtitle">{banner.subtitle}</span>
@@ -33,4 +31,17 @@ export function BannerBlock({ block }: BlockProps) {
       )}
     </BlockSection>
   )
+}
+
+/**
+ * The banner's two colors and its picture come from the database. They are
+ * handed to the stylesheet as CSS variables. A banner without a picture
+ * leaves --banner-image unset, and the stylesheet then shows the gradient.
+ */
+function bannerStyle(banner: Banner): CSSProperties {
+  const style: Record<string, string> = { '--banner-a': banner.color_a, '--banner-b': banner.color_b }
+  if (banner.image_url) {
+    style['--banner-image'] = `url("${banner.image_url}")`
+  }
+  return style as CSSProperties
 }

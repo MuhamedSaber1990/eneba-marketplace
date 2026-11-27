@@ -18,14 +18,17 @@ export type Banner = {
   link: string
   color_a: string
   color_b: string
+  image_url: string | null // null: the banner is its gradient alone
 }
 
 export type Deal = {
   slug: string
   name: string
+  title: string
   platform: string
   region: string
   cover_url: string
+  cover_art: boolean
   seller_name: string
   price_cents: number
   original_price_cents: number

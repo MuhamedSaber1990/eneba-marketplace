@@ -57,10 +57,20 @@
   justify-content: flex-end;
   gap: var(--space-1);
   padding: var(--space-3);
-  /* --banner-a and --banner-b are set per banner from the database. The dark
-     layer on top keeps white text readable on any pair of colors. */
+  /* --banner-a, --banner-b and --banner-image are set per banner from the
+     database. The layers, from the top one down:
+       1. a dark fade from the left, where the text is, so it stays readable
+       2. the banner's two colors at part strength, tinting the picture
+       3. the picture, when the banner has one
+       4. the two colors at full strength: all that shows without a picture */
   background:
-    linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.35)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.45) 55%, rgba(0, 0, 0, 0)),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--banner-a, var(--color-accent)) 30%, transparent),
+      color-mix(in srgb, var(--banner-b, var(--color-panel)) 30%, transparent)
+    ),
+    var(--banner-image, none) right center / cover no-repeat,
     linear-gradient(135deg, var(--banner-a, var(--color-accent)), var(--banner-b, var(--color-panel)));
   transition: filter 150ms ease;
 }

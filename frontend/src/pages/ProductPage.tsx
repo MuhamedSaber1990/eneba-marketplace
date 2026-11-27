@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getProduct, listProducts, type Offer, type ProductDetail } from '../api/catalog'
 import { AddToCartButton } from '../components/AddToCartButton'
+import { Cover } from '../components/Cover'
 import { ChevronIcon, StarIcon } from '../components/Icons'
 import { ProductCard } from '../components/ProductCard'
 import { formatPrice } from '../lib/money'
@@ -68,7 +69,9 @@ function ProductView({ product }: { product: ProductDetail }) {
       </nav>
 
       <div className="product__top">
-        <img className="product__cover" src={product.cover_url} alt="" width={225} height={300} />
+        <div className="product__cover">
+          <Cover src={product.cover_url} art={product.cover_art} title={product.title} platform={product.platform} lazy={false} />
+        </div>
 
         <div className="product__info">
           <h1 className="product__title">{product.name}</h1>

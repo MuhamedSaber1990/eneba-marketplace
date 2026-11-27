@@ -1,0 +1,47 @@
+/* The cover is a "container": sizes inside it can be given in cqw, hundredths
+   of the cover's own width. The title is then the same share of a small card
+   and of the large cover on the product page, with no breakpoints. */
+.cover {
+  position: relative;
+  container-type: inline-size;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: var(--color-panel);
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The title on a dark fade, then the platform on a strip along the bottom
+   edge. The fade starts clear, so the picture runs into it without a line. */
+.cover__overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75) 45%, rgba(0, 0, 0, 0.9));
+}
+
+.cover__title {
+  padding: 22cqw 8cqw 5cqw;
+  font-size: clamp(0.9375rem, 10cqw, 1.75rem);
+  font-weight: var(--font-heavy);
+  line-height: 1.05;
+  text-transform: uppercase;
+  text-wrap: balance; /* lines of similar length, where the browser supports it */
+  overflow-wrap: break-word;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.cover__platform {
+  padding: 3cqw 0;
+  background: var(--color-overlay);
+  color: var(--color-text-soft);
+  font-size: clamp(0.625rem, 5.5cqw, 0.8125rem);
+  font-weight: var(--font-bold);
+  line-height: 1.2;
+  text-align: center;
+}

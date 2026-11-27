@@ -33,13 +33,6 @@
   transform: translateY(-4px);
 }
 
-.product-card img {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
-}
-
 /* Holds the cover and any badge placed on top of it. */
 .product-card__media {
   position: relative;

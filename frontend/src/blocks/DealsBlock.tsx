@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Deal } from '../api/home'
+import { Cover } from '../components/Cover'
 import { ProductCardSkeleton } from '../components/ProductCard'
 import { timeLeft } from '../lib/countdown'
 import { formatPrice } from '../lib/money'
@@ -38,7 +39,7 @@ function DealCard({ deal, now }: { deal: Deal; now: Date }) {
   return (
     <Link to={`/product/${deal.slug}`} className="product-card">
       <div className="product-card__media">
-        <img src={deal.cover_url} alt="" width={225} height={300} loading="lazy" />
+        <Cover src={deal.cover_url} art={deal.cover_art} title={deal.title} platform={deal.platform} />
       </div>
       <div className="product-card__body">
         <h3 className="product-card__name">{deal.name}</h3>

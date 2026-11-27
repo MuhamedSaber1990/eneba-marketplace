@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { ProductSummary } from '../api/catalog'
 import { formatPrice } from '../lib/money'
 import { AddToCartButton } from './AddToCartButton'
+import { Cover } from './Cover'
 import './ProductCard.css'
 
 type Props = {
@@ -26,9 +27,8 @@ export function ProductCard({ product, rank, withActions = false }: Props) {
   return (
     <article className="product-card">
       <Link to={productUrl} className="product-card__link">
-        {/* width and height reserve the space, so the grid does not jump while covers load */}
         <div className="product-card__media">
-          <img src={product.cover_url} alt="" width={225} height={300} loading="lazy" />
+          <Cover src={product.cover_url} art={product.cover_art} title={product.title} platform={product.platform} />
           {rank !== undefined && (
             <span className="product-card__badge">
               <span className="visually-hidden">Rank </span>

@@ -4,7 +4,8 @@ import { apiGet } from './client'
 
 export type ProductSummary = {
   slug: string
-  name: string
+  name: string // the full product name, "Hollow Tide Steam Key GLOBAL"
+  title: string // the game alone, "Hollow Tide"
   platform: string
   region: string
   genre: string
@@ -13,6 +14,7 @@ export type ProductSummary = {
   from_offer_id: number | null // the offer with that price; null when sold out
   offer_count: number
   cover_url: string
+  cover_art: boolean // true: an illustration without text, the page writes the title over it
 }
 
 export type ProductList = {
