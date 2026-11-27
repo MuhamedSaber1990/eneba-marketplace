@@ -99,10 +99,43 @@ is a secondary button.
 tall promo banners (144 x 285 each), Popular gift cards, Recommended for you,
 Top games, best sellers rows, Upcoming games, Categories.
 
-## Not measured yet
+## Measured from screenshots in phase 8
 
-- Cart and checkout pages (they need items in a cart).
+The candidate supplied full-page screenshots of eneba.com (home, store,
+product, cart) at 1440 wide. They are kept outside the repository. These
+values were read from single pixels of those screenshots.
+
+| Role | Value | Where seen |
+|---|---|---|
+| Category bar band | `#341281` | full-width row under the header |
+| Section band | `#311178` | every second homepage section, offer rows |
+| Side panel | `#5825CC` | store filter column, product page price box |
+| Cart panel | `#351183` | "My cart" and "Summary" panels |
+| Cart line | `#2F0F73` | a line inside the cart panel |
+| Lime text | `#84E916` | the discount percent after a struck-through price, and the line under the price |
+
+This corrects two earlier entries: the product page's side panels are
+`#5825CC` (the `#7A4EDF` measured before is the lighter border and badge
+color), and lime is the discount color.
+
+Layout seen in the screenshots:
+
+- The category bar is a darker band across the whole window, links starting
+  at the left edge of the content column.
+- The search box follows the logo directly.
+- Homepage sections alternate between the page color and the section band,
+  and each row ends with a centered outlined "Show all" button, 194px wide.
+- The platform strip on a cover is centered and in normal case.
+- Store cards have two stacked buttons: "Add to cart" (primary) and
+  "View offers" (secondary).
+- Filter checkboxes are outlined squares; checked ones are yellow with a
+  dark tick.
+- The cart has a three-step line (Cart, Payment, Get your product), a minus
+  and plus quantity stepper, and a bin icon to remove a line.
+
+## Not measured
+
 - Hover and focus states.
-- Phone widths.
-
-Screenshots from the candidate will cover these in phase 8.
+- Phone widths. The screenshots are desktop only, so the phone layouts are
+  our own.
+- The footer.

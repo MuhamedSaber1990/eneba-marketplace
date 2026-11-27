@@ -1023,3 +1023,62 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   signed-in user.
 - **Going to pay** moved the countdown from 14:59 to 35:57.
 
+## 77. The styling pass: what was taken from Eneba and what was not
+
+- **Method:** screenshots of our pages and of eneba.com side by side, a
+  numbered list of 20 differences, approved before any change. Colors were
+  read from pixels of the screenshots, not guessed.
+- **Taken:** layout and color. The category bar as a full-width band,
+  alternating section bands, the "Show all" button, the discount on the
+  price line in lime, the filter panel and its checkboxes, two buttons on
+  store cards, offers split into "Best offer" and "N other offers", the
+  three-step line and the quantity stepper in the cart.
+- **Not taken, because it is theirs:** the logo, all artwork, and other
+  companies' marks (platform icons, payment logos, review badges). Platform
+  names are text. Seller marks are a letter on a color worked out from the
+  seller's name.
+- **Not taken, because we do not have the feature:** cashback, wishlist,
+  currency choice, reviews, discount codes, filter counts. A control that
+  does nothing would be a lie on the page.
+- **The reference screenshots are not in the repository.** They show Eneba's
+  own pages and artwork. Only our own before and after screenshots are, in
+  `docs/screenshots/phase8/`.
+
+## 78. "Add to cart" on a store card adds the cheapest offer
+
+- **The question:** a product has several sellers, so which offer does a
+  card's button add?
+- **Choice:** the one behind the "From" price on that card: the cheapest
+  offer that has keys. The product list now sends its id as
+  `from_offer_id`, next to `from_price_cents`.
+- **Ties:** two offers can cost the same. Both the list and the product page
+  then pick the lower offer id, so the card's button and the product page's
+  "Best offer" are always the same offer. A test checks that for every
+  product.
+- **Sold out:** no offer, no button. The card shows only "View offers".
+- **Markup:** the card used to be one link. A button inside a link is not
+  valid HTML, so the cover and text are now the link and the buttons sit
+  beside it.
+- **One button component.** `AddToCartButton` is used by the card, the price
+  box and the offer rows, so the "In cart (2)" label and the per-order limit
+  behave the same everywhere.
+
+## 79. Cover addresses carry a version
+
+- **Problem:** covers are drawn by the API and browsers keep them for a day.
+  After the platform strip changed, a returning visitor would have seen old
+  and new covers mixed.
+- **Choice:** the cover's address ends in `?v=2`. Changing the drawing means
+  raising that number, which gives every cover a new address.
+- **Alternative:** a shorter cache time. That would make every visit slower
+  to fix something that happens only when the drawing changes.
+
+## 80. "More on <platform>" is the store's own list request
+
+- **What:** one row of up to six other products on the same platform, at the
+  bottom of the product page.
+- **Why no new endpoint:** `GET /api/products?platform=...` already returns
+  exactly that. The page drops the product being viewed and keeps six.
+- **If it fails or is empty,** the row is left out. It is an extra, and an
+  error message for it would be noise.
+
