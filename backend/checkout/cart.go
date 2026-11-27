@@ -147,7 +147,7 @@ func priceLines(ctx context.Context, q querier, lines []Line) (PricedCart, error
 	}
 
 	rows, err := q.Query(ctx, `
-		SELECT o.id, o.price_cents, p.slug, p.name, p.region, s.name,
+		SELECT o.id, o.price_cents, p.slug, p.name, p.title, p.region, s.name,
 		       (SELECT COUNT(*) FROM keys k
 		         WHERE k.offer_id = o.id AND k.status = 'available') AS stock
 		  FROM offers o
@@ -164,7 +164,8 @@ func priceLines(ctx context.Context, q querier, lines []Line) (PricedCart, error
 	found := map[int64]bool{}
 	for rows.Next() {
 		var line PricedLine
-		err := rows.Scan(&line.OfferID, &line.UnitPriceCents, &line.ProductSlug, &line.ProductName,
+		var title string
+		err := rows.Scan(&line.OfferID, &line.UnitPriceCents, &line.ProductSlug, &line.ProductName, &title,
 			&line.Region, &line.SellerName, &line.Stock)
 		if err != nil {
 			return PricedCart{}, fmt.Errorf("reading a cart line: %w", err)
@@ -172,7 +173,8 @@ func priceLines(ctx context.Context, q querier, lines []Line) (PricedCart, error
 		line.Quantity = quantityOf[line.OfferID]
 		line.LineTotalCents = line.UnitPriceCents * line.Quantity
 		line.Available = line.Stock >= line.Quantity
-		line.CoverURL = catalog.CoverURL(line.ProductSlug)
+		// A cart line shows a small cover, so only the address is needed.
+		line.CoverURL, _ = catalog.CoverFor(title, line.ProductSlug)
 
 		cart.Lines = append(cart.Lines, line)
 		cart.TotalCents += line.LineTotalCents

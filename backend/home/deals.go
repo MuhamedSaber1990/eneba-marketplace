@@ -14,9 +14,11 @@ import (
 type Deal struct {
 	Slug               string    `json:"slug"`
 	Name               string    `json:"name"`
+	Title              string    `json:"title"` // the game alone, written over the cover
 	Platform           string    `json:"platform"`
 	Region             string    `json:"region"`
 	CoverURL           string    `json:"cover_url"`
+	CoverArt           bool      `json:"cover_art"` // see catalog.CoverFor
 	SellerName         string    `json:"seller_name"`
 	PriceCents         int       `json:"price_cents"`          // what a buyer pays now
 	OriginalPriceCents int       `json:"original_price_cents"` // the price before the deal
@@ -34,7 +36,7 @@ const maxDeals = 6
 //   - the offer's price really is below the old price
 func (s *Store) Deals(ctx context.Context) ([]Deal, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT p.slug, p.name, p.platform, p.region, s.name,
+		SELECT p.slug, p.name, p.title, p.platform, p.region, s.name,
 		       o.price_cents, d.original_price_cents, d.ends_at
 		  FROM deals d
 		  JOIN offers o   ON o.id = d.offer_id
@@ -55,13 +57,13 @@ func (s *Store) Deals(ctx context.Context) ([]Deal, error) {
 	deals := []Deal{}
 	for rows.Next() {
 		var d Deal
-		err := rows.Scan(&d.Slug, &d.Name, &d.Platform, &d.Region, &d.SellerName,
+		err := rows.Scan(&d.Slug, &d.Name, &d.Title, &d.Platform, &d.Region, &d.SellerName,
 			&d.PriceCents, &d.OriginalPriceCents, &d.EndsAt)
 		if err != nil {
 			return nil, fmt.Errorf("reading a deal row: %w", err)
 		}
 		d.EndsAt = d.EndsAt.UTC() // always written as ...Z, whatever the server's time zone
-		d.CoverURL = catalog.CoverURL(d.Slug)
+		d.CoverURL, d.CoverArt = catalog.CoverFor(d.Title, d.Slug)
 		d.DiscountPercent = DiscountPercent(d.OriginalPriceCents, d.PriceCents)
 		deals = append(deals, d)
 	}

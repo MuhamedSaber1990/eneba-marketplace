@@ -30,8 +30,11 @@ func NewStore(db *pgxpool.Pool) *Store {
 
 // ProductSummary is a product as shown on a card in a list.
 type ProductSummary struct {
-	Slug        string `json:"slug"`
+	Slug string `json:"slug"`
+	// Name is the full product name, "Hollow Tide Steam Key GLOBAL". Title is
+	// the game alone, "Hollow Tide": what is written over the cover.
 	Name        string `json:"name"`
+	Title       string `json:"title"`
 	Platform    string `json:"platform"`
 	Region      string `json:"region"`
 	Genre       string `json:"genre"`
@@ -45,6 +48,9 @@ type ProductSummary struct {
 	FromOfferID *int64 `json:"from_offer_id"`
 	OfferCount  int    `json:"offer_count"`
 	CoverURL    string `json:"cover_url"`
+	// CoverArt is true when the cover is an illustration without text, so
+	// the page draws the title over it. See art.go.
+	CoverArt bool `json:"cover_art"`
 }
 
 // ListParams are the filters, sort order and page of a store listing.
@@ -126,7 +132,7 @@ WITH priced AS (
 
 // SummaryColumns are the columns of "priced" that make up a ProductSummary,
 // in the order ScanSummary reads them.
-const SummaryColumns = `slug, name, platform, region, genre,
+const SummaryColumns = `slug, name, title, platform, region, genre,
        to_char(release_date, 'YYYY-MM-DD'), from_price_cents, from_offer_id, offer_count`
 
 // ScanSummary reads one row selected with SummaryColumns. Extra columns
@@ -137,11 +143,11 @@ const SummaryColumns = `slug, name, platform, region, genre,
 // needed and not a concrete type.
 func ScanSummary(row interface{ Scan(dest ...any) error }, extra ...any) (ProductSummary, error) {
 	var p ProductSummary
-	dest := []any{&p.Slug, &p.Name, &p.Platform, &p.Region, &p.Genre, &p.ReleaseDate, &p.FromPriceCents, &p.FromOfferID, &p.OfferCount}
+	dest := []any{&p.Slug, &p.Name, &p.Title, &p.Platform, &p.Region, &p.Genre, &p.ReleaseDate, &p.FromPriceCents, &p.FromOfferID, &p.OfferCount}
 	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return ProductSummary{}, err
 	}
-	p.CoverURL = CoverURL(p.Slug)
+	p.CoverURL, p.CoverArt = CoverFor(p.Title, p.Slug)
 	return p, nil
 }
 
@@ -275,11 +281,11 @@ func (s *Store) Get(ctx context.Context, slug string) (ProductDetail, error) {
 	var detail ProductDetail
 	var productID int64
 	err := s.db.QueryRow(ctx, `
-		SELECT id, slug, name, platform, region, genre,
+		SELECT id, slug, name, title, platform, region, genre,
 		       to_char(release_date, 'YYYY-MM-DD'), description
 		  FROM products
 		 WHERE slug = $1`, slug,
-	).Scan(&productID, &detail.Slug, &detail.Name, &detail.Platform, &detail.Region,
+	).Scan(&productID, &detail.Slug, &detail.Name, &detail.Title, &detail.Platform, &detail.Region,
 		&detail.Genre, &detail.ReleaseDate, &detail.Description)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProductDetail{}, ErrNotFound
@@ -287,7 +293,7 @@ func (s *Store) Get(ctx context.Context, slug string) (ProductDetail, error) {
 	if err != nil {
 		return ProductDetail{}, fmt.Errorf("loading product %q: %w", slug, err)
 	}
-	detail.CoverURL = CoverURL(detail.Slug)
+	detail.CoverURL, detail.CoverArt = CoverFor(detail.Title, detail.Slug)
 
 	rows, err := s.db.Query(ctx, `
 		SELECT id, seller_name, seller_rating, seller_sales_count, price_cents, stock

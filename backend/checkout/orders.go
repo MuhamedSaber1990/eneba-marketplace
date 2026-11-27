@@ -440,7 +440,12 @@ func (s *Store) GetOrder(ctx context.Context, userID int64, orderID string) (Ord
 		SELECT oi.product_slug, oi.product_name, oi.seller_name, oi.unit_price_cents, oi.quantity,
 		       ARRAY(SELECT k.code FROM keys k
 		              WHERE k.order_item_id = oi.id AND k.status = 'sold' AND $2::boolean
-		              ORDER BY k.id)
+		              ORDER BY k.id),
+		       -- The game's title, to find its cover. An order keeps its own
+		       -- copy of the product's name but not of the title, so it is
+		       -- looked up. If the product is gone, the title is empty and
+		       -- the cover falls back to the drawn one.
+		       COALESCE((SELECT p.title FROM products p WHERE p.slug = oi.product_slug), '')
 		  FROM order_items oi
 		 WHERE oi.order_id = $1
 		 ORDER BY oi.id`, orderID, order.Status == StatusPaid)
@@ -452,12 +457,13 @@ func (s *Store) GetOrder(ctx context.Context, userID int64, orderID string) (Ord
 	order.Items = []OrderItem{}
 	for rows.Next() {
 		var item OrderItem
+		var title string
 		err := rows.Scan(&item.ProductSlug, &item.ProductName, &item.SellerName,
-			&item.UnitPriceCents, &item.Quantity, &item.Keys)
+			&item.UnitPriceCents, &item.Quantity, &item.Keys, &title)
 		if err != nil {
 			return Order{}, fmt.Errorf("reading an order item: %w", err)
 		}
-		item.CoverURL = catalog.CoverURL(item.ProductSlug)
+		item.CoverURL, _ = catalog.CoverFor(title, item.ProductSlug)
 		order.Items = append(order.Items, item)
 	}
 	if err := rows.Err(); err != nil {
