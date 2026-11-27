@@ -3360,3 +3360,114 @@ Phases 1 to 7 are done and live. Phase 8 is what is left:
 1. A styling pass against your eneba.com screenshots, which I still do not have. Send them when convenient: homepage, store, product page, cart.
 2. The README: setup, architecture overview, live URL, test credentials, known limitations.
 3. The walkthrough of the codebase file by file, and the quiz.
+
+### Prompt 29
+
+````text
+Great result. Yes, push the /api/auth/me change and the screenshots, then confirm the console is clean for a signed-out visitor.
+
+For phase 8, the eneba.com screenshots are in ~/eneba-reference/ : eneba-home.png, eneba-store.png, eneba-product.png and eneba-cart.png, full page at 1440 wide. They're outside the repo on purpose, don't copy them in or commit them, they're Eneba's own pages and artwork.
+
+Start with the styling pass. Look at them next to our pages and tell me the differences you'd fix and the ones you'd leave, before changing anything. I want it to feel like Eneba without copying their artwork or logo.
+````
+
+### Reply 34
+
+Pushed, and the console is clean. Below is the styling comparison. I have changed nothing yet.
+
+## The push
+
+- CI passed on both jobs.
+- Live, signed out: `/api/auth/me` answers 200 with `{"user":null}`, and `/api/orders` still answers 401.
+- I opened six pages as a signed-out visitor in a browser (home, store, a product, cart, a search, sign in) and recorded every console error, console warning and failed request. There were none.
+
+## How I compared
+
+I took screenshots of our live pages at 1440 wide and looked at them next to yours: home, store, product and cart. Your files stayed where they are. I cut them into sections in the temporary folder to view them, outside the repository, and nothing from them was copied in.
+
+Not compared: the footer (I did not look at the bottom of their pages closely), hover and focus states, and phone widths. Your screenshots are desktop only, so on phones our own layout stays.
+
+**What already matches:** the page purple, the dark card panels, the yellow buttons, Metropolis, square corners, the two-row header with the outlined search box, the card's text block (title, green region, "From", price), the 4-column store grid with the filter column on the left.
+
+## What I would fix
+
+Numbered so you can strike any of them.
+
+**Every page**
+
+1. **The category bar is a darker band across the full width, with links starting at the left edge.** Ours has no band and the links are centred. This is the most visible difference in the header.
+2. **The search box sits right after the wordmark.** Ours floats in the middle with a gap on both sides.
+3. **A small person icon before "Log in | Register".** Ours is two plain links.
+
+**Homepage**
+
+4. **Sections alternate between the page purple and a darker full-width band.** Ours is one flat purple from top to bottom. I think this change does the most for the "feels like Eneba" goal, and it is a few lines of CSS.
+5. **Each row ends with a centred outlined "Show all" button.** Ours has a small yellow "See all" link at the top right.
+6. **The platform strip on a cover is centred, in normal case.** Ours is left-aligned capitals.
+7. **A discount is shown on the price line: the old price struck through, then the percent in lime.** Ours puts the percent in a mint badge on the cover's corner. I would move it to the price line and show "Ends in ..." in lime below the price, where they show their cashback line. This also settles the lime color I had marked "role to confirm" in the design notes.
+
+**Store**
+
+8. **The filter column is a panel of its own, with a divider between groups.** Ours is loose text on the page.
+9. **Checkboxes are outlined squares, yellow with a tick when checked.** Ours are the browser's white boxes, which stand out as the least finished thing on the page.
+10. **The sort control is bold text with an arrow, no box.** Ours is a boxed dropdown.
+11. **Store cards carry two buttons: yellow "Add to cart" and outlined "View offers".** Ours have none. This one is not only styling:
+    - "Add to cart" would add the cheapest offer, the one behind the "From" price.
+    - The product list does not send that offer's id today, so the backend needs one more field and a test.
+    - Sold-out products would show only "View offers".
+
+**Product page**
+
+12. **The cover is larger** (about 224 wide, ours is 160), and the page looks less empty for it.
+13. **The offers are split under two headings: the best offer first, then "N other offers".** Ours is one table with column headers.
+14. **Each offer row has a round seller mark and a yellow star before the rating.** I would generate the mark from the seller's initial and a color, the same way as the covers. No images.
+15. **The side panel has the yellow button.** Theirs holds the price and the main buy button. Ours shows the best price but you have to find the button in the table. I would put "Add to cart" for the best offer there, and make the buttons in the other rows outlined, so the page has one clear yellow action.
+16. **The side panel's purple looks lighter on our page than on theirs.** I will measure the color from our own screenshot against the earlier measurement before changing it, not guess.
+17. **Breadcrumb separators are small arrows.** Ours are slashes.
+
+**Cart and checkout**
+
+18. **A three-step line: Cart, Payment, Get your product.** I would add it to our cart, checkout and order pages, under our normal header, with wording that fits us (Cart, Payment, Your keys).
+19. **Quantity is a minus and plus stepper, and remove is a bin icon.** Ours is a dropdown and the word "Remove".
+20. **The heading sits inside the panel** ("My cart"), and the summary lists "1 product" with its price above the total. Ours has the heading outside and only a total.
+
+## What I would leave
+
+**Because it is theirs**
+- The logo and the bird mark. Ours stays the "keybay" wordmark with the yellow bar.
+- All artwork: banners, game covers, gift card designs. Ours stay generated.
+- Other companies' marks: the Steam, PlayStation and Xbox icons on the cover strips, PayPal and the card logos, Trustpilot, ScamAdviser, PCMag. Text names only.
+- The row of category icons under the banners. It is mostly brand icons.
+
+**Because we do not have the feature, and faking it would be dishonest**
+- Cashback, wishlist hearts, language and currency, the Black Friday countdown and promo pills.
+- Screenshots and trailer on the product page, reviews, the activation guide.
+- Discount code, donation, marketing checkboxes, the service fee line.
+- The email box in their cart. We deliver keys on the order page to a signed-in buyer.
+- Counts next to each filter option (Game 104531). It needs a counting query per option, and it is a feature more than a style.
+
+**Because ours is a deliberate choice**
+- The homepage banner: one wide banner and two tiles, where they have a row of tall poster tiles. Theirs only works with artwork.
+- The rank numbers on best sellers and the name filter in the store. They are ours and they do something.
+- Their stripped-down header on the cart page. I would keep our full header there so search and sign-in stay reachable.
+- Their wider product page (it breaks out of the 1200 column). Ours stays in the same column as every other page.
+
+## One thing that is not in your request
+
+**A "More on Steam" row at the bottom of the product page,** like their "Gamers also viewed". Our product page ends in a lot of empty purple when a game has two offers. The row would reuse the existing card and the existing list request with the platform filter, so no backend change. It is a feature, not styling, so I will only build it if you say yes.
+
+## Scope and risk
+
+- Items 1 to 10 and 12 to 20 are CSS and small changes in existing components. No new dependency.
+- Item 11 is the only one that touches the backend: one field in the list answer, one test, no migration.
+- Icons (person, bin, plus, minus, arrows, star) would be small inline SVGs drawn in the code, like the search and cart icons now.
+- Everything stays inside the current Content-Security-Policy.
+- I would check each page at 1440 and at phone width after the change, and rerun lint, the build and the 59 tests.
+
+## What I need from you
+
+1. Which numbers to drop, if any. If you say nothing else, I build 1 to 20.
+2. Item 11, the buttons on store cards: yes or no, since it adds a backend field.
+3. The "More on Steam" row: yes or no.
+
+After that I build it locally, show you before and after screenshots, and ask before pushing.
