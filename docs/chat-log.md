@@ -3981,3 +3981,148 @@ After the art is in and you have approved it, I take fresh screenshots of every 
 4. **`prompts.md` is outside the repository, as you asked.** The art will be in the repository without its prompts. Do you want a copy of the prompts text in `docs/` as well, so Eneba can see exactly how each image was made? I would, but it is your call.
 
 Still held from before: the seller color fix and chat log entries are committed locally and not pushed.
+
+
+### Prompt 34
+
+````text
+I looked at the test cover and I like it, that's the look I want. Go ahead with the batch.
+
+1. Style: keep this rendering for all 24. Different palette per title like you said, and let the mood follow the genre, so the horror and stealth ones can be darker and less cute, but still clearly the same shop.
+2. Quota: yes, generate the rest. If you hit the limit, stop and tell me how many are done.
+3. Banners: yes to migration 007 and the production run. The backend deciding what the homepage shows is the whole point of that feature.
+4. Prompts: yes, put a copy in docs/ so anyone can see how each image was made.
+
+Plan parts 2 to 4 are fine. Stop at the contact sheet and wait for me.
+````
+
+### Reply 39
+
+The 24 remaining images are generating in the background (three at a time, roughly 45 seconds each). I'll build the contact sheet as soon as the batch finishes.
+
+### Prompt 35
+
+````text
+untill it is finished
+
+One more thing for after the redesign, plan first: the sign-up feels unrealistic, it's two fields and you're in. I want it to feel like a normal site without adding an email service.
+
+- A name field, shown in the header and on the account page instead of the email.
+- Confirm password, and the password rules shown live as I type, with a show/hide button.
+- A required "I agree to the Terms and Privacy Policy" checkbox, with two short pages that say clearly they're demo text. An optional marketing checkbox, unticked by default.
+- A short welcome step after signing up, then on to wherever I was going.
+- The sign-in page stays simple. Add the show/hide button there too.
+
+Keep email verification and password reset out, and leave them in the README as known limitations with the reason. Check on the server whatever the form checks, tell me what the migration changes, and keep the demo account working.
+````
+
+### Reply 40
+
+Here is the sign-up plan while the images generate. Nothing is built, and it waits until the redesign is done, as you said.
+
+**Batch status:** still running in the background. Before starting it I made one darker cover, Hollow Tide, to check the method: a lighthouse in a teal storm, clearly a different mood from the kart and no text. I will come back with the contact sheet when the batch ends.
+
+## What changes for a visitor
+
+**Sign-up form, top to bottom**
+1. Name
+2. Email
+3. Password, with a show/hide button
+4. Confirm password
+5. The password rules, each turning from grey to a green tick as it is met
+6. "I agree to the Terms and Privacy Policy" (required), the two names being links that open in a new tab
+7. "Send me news about deals" (optional, unticked)
+8. Create account
+
+**After signing up:** a welcome page, "Welcome, Layla", with three lines on what the account does (your orders, your keys, faster checkout) and one button, "Continue". It goes to wherever you were headed, for example the checkout, or the homepage.
+
+**Sign-in page:** unchanged, plus the show/hide button.
+
+**Header and account page:** the name where the email is now. The account page shows name, email, and the marketing choice.
+
+**Two new pages, `/terms` and `/privacy`:** a few short paragraphs each, with a notice at the top that this is demo text for an assignment and not a legal document. Linked from the footer.
+
+## The password rules
+
+Three rules, shown live:
+- at least 8 characters
+- not the same as your email
+- the two passwords match
+
+**I would not add "one capital, one number, one symbol".** Current guidance (NIST) advises against composition rules: they push people to `Password1!` and do not make passwords stronger. Length is what counts. If you want them anyway because they look familiar, say so, and I will add them on both sides.
+
+The 72-byte upper limit stays (it comes from bcrypt) and is only shown if someone hits it.
+
+## Server side
+
+The form's checks are for convenience. The server repeats every one, and its answer is what counts:
+
+| Check | Form | Server |
+|---|---|---|
+| Name: 1 to 60 characters after trimming, no control characters | yes | yes |
+| Email format | yes | yes, as today |
+| Password at least 8 characters, at most 72 bytes | yes | yes, as today |
+| Password is not the email | yes | yes, new |
+| Confirmation matches | yes | yes, new: the form sends both values |
+| Terms accepted | yes | yes, new: refused unless it is `true` |
+| Marketing choice | optional | stored as sent, default false |
+
+The existing protections do not change: the Origin check, JSON only, the limit of 10 sign-ups per IP per hour, bcrypt.
+
+The rules live in one small function on each side, with tests on both, so the form and the server cannot drift apart unnoticed.
+
+## The migration
+
+One file. Its number depends on the banner migration, so probably `008_profiles.sql`. It changes only the `users` table:
+
+| Column | Type | For existing accounts |
+|---|---|---|
+| `name` | text, required, 1 to 60 characters | filled from the part of the email before the `@`. The demo account gets "Demo Player". |
+| `terms_accepted_at` | timestamp, may be empty | left empty. Those accounts never ticked a box, and I will not record that they did. |
+| `marketing_opt_in` | true or false, default false | false |
+
+No table is added, nothing is removed, no session is touched. Everyone who is signed in stays signed in.
+
+New sign-ups always get `terms_accepted_at` set to the moment of signing up, because the server refuses the sign-up otherwise.
+
+## The demo account
+
+- Same email and password. It signs in exactly as now.
+- The migration names it "Demo Player", and the seed does the same for a fresh database.
+- It is exempt from the terms check for the simple reason that it never passes through the sign-up form.
+- I will sign in with it on dev and then on the live site after the change, as part of the checks.
+
+## Two honesty points
+
+**The marketing checkbox stores a choice and nothing is ever sent.** You asked for no fake features in the redesign, and this is close to that line. My suggestion: keep it, since you want the form to feel normal, but be straight about it in two places. The Privacy page says no emails are sent by this demo, and the account page shows the stored choice, so it is at least a real preference a real field holds. If you would rather drop it, the form is still convincing without it.
+
+**The welcome page is not a verification step** and will not pretend to be one. It will not say "check your inbox".
+
+## README, known limitations
+
+Kept, with the reason added:
+- **No email verification and no password reset.** Both need the site to send email, and the project has no email service by choice. Without verification, anyone can sign up with an address they do not own, so an email here proves nothing. Without reset, a forgotten password means a new account.
+
+New:
+- A name cannot be changed after signing up, unless you want an edit field on the account page. It is small: one more endpoint and a test.
+- The Terms and Privacy pages are demo text.
+
+## Not included, unless you ask
+
+- Editing the name or the marketing choice later.
+- A password strength meter. The three rules say what matters.
+- Showing which version of the terms was accepted.
+
+## Order of work, when its turn comes
+
+1. Migration on dev, backend validation and tests.
+2. The form, the rules component, show/hide, the two pages, the welcome step.
+3. Header and account page.
+4. Checks in a browser: sign up with each rule broken in turn, with the form's checks bypassed to prove the server refuses, the welcome step with and without a destination, the demo account.
+5. Summary and SQL, production migration with your ok, push with your ok.
+
+## Questions
+
+1. Password rules: my three, or the familiar capital-number-symbol set as well?
+2. The marketing checkbox: keep it with the honest wording, or drop it?
+3. Should the name be editable on the account page?
