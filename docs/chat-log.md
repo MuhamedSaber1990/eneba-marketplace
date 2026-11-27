@@ -4533,3 +4533,150 @@ In `~/eneba-marketplace/docs/screenshots/`. "Before" is the art round.
 **Ok to push** the layout round: seven commits and the chat log. No migration, no Vercel change. The backend change is one extra field on the platform tiles.
 
 After the push I will check the live site again, then start the sign-up work as planned. Its first step is a migration on dev, and I will come back with the summary and the SQL before anything touches production.
+
+
+### Prompt 40
+
+````text
+Looks good, the platform accent is about right. Yes, push the layout round and check the live site. I'll try the hover and the loading shimmer myself.
+
+Then start the sign-up work as planned, summary and SQL before production.
+````
+
+### Reply 46
+
+The layout round is live. The sign-up work is built, tested and committed locally. Migration 008 is applied to dev only, and nothing of the sign-up work is pushed.
+
+## Part 1: the layout round is live
+
+- **CI** passed on both jobs.
+- **Checked on the live site, measured in a browser:**
+  - the hero banner is 400 high;
+  - each of the four platform tiles holds three covers;
+  - four different platform accent colors are in use;
+  - the footer has 11 links;
+  - the product page has the description beside the cover, and "More on Steam" shows six different games;
+  - the cart shows six best sellers under it;
+  - no console errors.
+
+## Part 2: the sign-up work
+
+### Screenshots
+
+In `~/eneba-marketplace/docs/screenshots/signup/`:
+`signup-empty.png`, `signup-filled.png`, `welcome.png`, `account.png`, `signin.png`, `terms.png`, `privacy.png`, `phone-signup.png`.
+
+### What a visitor gets
+
+- **Sign-up form:** name, email, password with a show/hide button, confirm password, the three rules that tick as they are met, the required Terms checkbox with links that open in a new tab, the optional marketing checkbox (unticked), then "Create account". Under the email field it says "Nothing is sent to it. This demo has no email service."
+- **Welcome page:** "Welcome, Layla Hassan", three lines on what the account does, and a button that goes on to where the visitor was headed. It says "Continue" when there is a destination and "Start browsing" when there is none.
+- **Sign-in:** unchanged, plus show/hide.
+- **Header:** the name, not the email.
+- **Account page:** a form for the name and the marketing choice, with "Saved." after saving. The email is shown with a line saying why it cannot be changed.
+- **`/terms` and `/privacy`:** short pages that start with "This is demo text." and then say what the demo really does. Both are linked from the footer.
+
+### The migration
+
+`migrations/008_profiles.sql`, without its comments:
+
+```sql
+ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT 'Player';
+
+UPDATE users
+   SET name = CASE
+                WHEN is_demo THEN 'Demo Player'
+                ELSE COALESCE(NULLIF(left(split_part(email, '@', 1), 60), ''), 'Player')
+              END;
+
+ALTER TABLE users ADD CONSTRAINT users_name_length
+    CHECK (char_length(name) BETWEEN 1 AND 60);
+
+ALTER TABLE users ADD COLUMN terms_accepted_at TIMESTAMPTZ;
+
+ALTER TABLE users ADD COLUMN marketing_opt_in BOOLEAN NOT NULL DEFAULT false;
+```
+
+What it changes, all on the `users` table:
+
+| Column | For existing accounts |
+|---|---|
+| `name`, required, 1 to 60 characters | the part of the email before the `@`. The demo account becomes "Demo Player". |
+| `terms_accepted_at`, may be empty | left empty. They never ticked the box. |
+| `marketing_opt_in`, default false | false |
+
+No table is added, nothing is removed, and no session is touched. Everyone who is signed in stays signed in.
+
+**One thing that was not in the plan: the `DEFAULT 'Player'` on `name`.** The migration has to run before the new code goes live, because the new code reads the new columns. In the minutes between, the old code still creates accounts without a name. Without the default, those sign-ups would fail. With it they succeed and get "Player". The new code always sends a name, so the default is not used after that. It is `DECISIONS.md` entry 92.
+
+### Server side
+
+Every check the form makes is repeated by the server:
+
+| Sent to the API directly, form bypassed | Answer |
+|---|---|
+| terms not accepted | 400 "You need to agree to the Terms and the Privacy Policy to create an account." |
+| the two passwords differ | 400 "The two passwords do not match." |
+| a name of only spaces | 400 "Enter your name." |
+| the password is the email | 400 "The password cannot be your email address." |
+| the old two-field request | 400 "Enter your name." |
+
+Those five are from a real browser, calling the API from the page without the form. The Go tests cover 14 cases in the same way, and check afterwards that none of the refused requests created an account.
+
+**New endpoint: `POST /api/account`.** It changes the name and the marketing choice of the signed-in user. Which account is changed comes from the session, never from the request. A test sends an `id`, another `email` and `is_demo: true` in the body and checks that none of them has any effect. It needs a session, the site's own Origin and JSON, like every other changing request.
+
+### The demo account
+
+- Same email and password. I signed in with it on dev after the migration, and the header showed "Demo Player".
+- It has no `terms_accepted_at`, because it never passes through the form.
+- The seed gives a fresh database the same name.
+
+### Tests and checks
+
+- **Go:** all six packages pass, 86 tests. New: the 14 refused sign-ups, the stored profile (name tidied, terms time set, nothing secret in the answer), and the account endpoint (changes, refusals, own account only, needs session and Origin). `gofmt`, `go vet` and `govulncheck` are clean.
+- **Frontend:** 72 tests, 7 new for the password rules. Lint, type check and build pass.
+- **In a browser on the built site with the real security headers:**
+  - each rule broken in turn, with the right message and the right ticks;
+  - show/hide changes one field and leaves the other hidden;
+  - sign up, welcome, "Continue" lands on `/cart`;
+  - account: saved, the header changed at once, and the change survived a reload;
+  - an empty name on the account page is refused;
+  - sign out, then the demo account signs in;
+  - `/welcome` when signed out sends you to sign in;
+  - `/welcome?next=https://evil.example` gives a button that goes to `/`, not to the other site;
+  - phone width: nothing wider than the screen;
+  - no console errors, no security policy violations.
+
+### Two bugs I found in my own screenshots and fixed
+
+- **The two checkboxes on the sign-up form were drawn as tall dark blocks.** The form's rule for text inputs was also catching them. The rule now leaves checkboxes out.
+- **The name field on the account page kept untidy spacing after saving** ("Layla  H." with two spaces, while the server had stored one). It now shows what was stored.
+
+### Not verified
+
+- **Password managers.** The fields carry the standard hints (`new-password`, `current-password`, `name`, `email`). I did not test with a real password manager.
+- **A screen reader.** The rules list says "done" or "to do" for each rule in hidden text, and errors are announced. I did not listen to it.
+- **Chromium only.**
+- **The migration on a database with many real accounts.** Dev has a handful. The statements are simple, and production has few accounts too.
+
+### Side effects
+
+- Dev has two leftover test accounts from the browser checks, named `browser-...@keybay.example`. They hold nothing. Say if you want them deleted.
+- One of the five commits does not build alone: the form commit mentions the Terms pages that arrive in the next commit. The branch as a whole builds and passes. I can fold those two commits together before pushing if you care about each commit building.
+
+### README draft
+
+Updated and still uncommitted: the sign-up description, the limitations with their reasons (no verification, no reset, email and password not changeable, the marketing checkbox, demo legal text), and the test counts.
+
+## What I need from you
+
+In this order, because the new code needs the new columns:
+
+1. **Ok to run migration 008 on production.**
+   ```
+   database: ep-restless-union-bhfufpzq (from .env.production)
+   pending 008_profiles.sql
+   ```
+2. **Ok to push** after it: five commits and the chat log.
+3. After that I check the live site: sign up a new account, the welcome step, the account page, the demo account, and one purchase with the new account through Stripe.
+
+Then the README is the last thing before the walkthrough and the quiz.
