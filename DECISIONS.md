@@ -1167,3 +1167,36 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
   the site itself and nothing else.
 - **Size:** 27 files, about 1.1 MB in the repository. Covers are 16 to 54 KB.
 
+## 86. The layout round: ten fixes after the art went in
+
+Agreed as a numbered list before building, like the Eneba comparison.
+
+- **Hero banner 400 high** with a larger headline. The two small banners
+  show a title and a button. Their subtitle is still in the page for screen
+  readers.
+- **Platform tiles show three covers** from that platform. The API picks
+  them with `ORDER BY md5(title || platform)`: a fixed pick per platform.
+  Ordering by date would have put the same newest games on every tile.
+- **The description sits beside the cover** on the product page, where there
+  was an empty area, and its own section further down is gone.
+- **Card hover:** the card lifts, the picture grows 5% inside its frame and
+  a yellow line draws along the bottom. `:focus-within` gives keyboard users
+  the same.
+- **A yellow bar before section headings,** the same bar as in the logo.
+- **A footer with three columns of links.** Every link goes to something
+  that exists. The platform list is loaded once, in the layout, and handed
+  to both the header and the footer.
+- **Loading placeholders in the shape of what is loading:** a cover and
+  three lines for a card, and the product page's three columns. The shimmer
+  stops for visitors who ask their system for reduced motion.
+- **A thin line in a color per platform** on each cover. Editions of one
+  game share a picture, and this line is what differs. It is 2 pixels and
+  soft on purpose, so it does not compete with the art. Text names, no
+  logos.
+- **Best sellers under the cart,** the same block the empty search page
+  uses. Real data from an existing endpoint.
+- **"More on <platform>" shows each game once.** A game sold for two regions
+  showed the same picture twice.
+- **Left alone:** the header, the filter panel, the cart layout, the
+  colors, six cards per row, and editions as separate products.
+
