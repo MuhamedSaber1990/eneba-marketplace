@@ -16,8 +16,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi
       .getMe(controller.signal)
       .then(setUser)
-      // 401 is the normal answer for a visitor who is not signed in. Any
-      // other failure is treated the same way: not signed in.
+      // The answer is the user, or null for a visitor who is not signed in.
+      // If the request itself fails, the visitor is treated as signed out.
       .catch(() => setUser(null))
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)

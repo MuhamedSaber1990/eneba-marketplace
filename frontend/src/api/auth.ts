@@ -20,7 +20,11 @@ export function signOut(): Promise<void> {
   return apiPost<void>('/api/auth/signout')
 }
 
-/** Who is signed in. Throws an ApiError with status 401 when nobody is. */
-export async function getMe(signal?: AbortSignal): Promise<User> {
-  return (await apiGet<UserResponse>('/api/auth/me', signal)).user
+/**
+ * Who is signed in, or null when nobody is. Being signed out is a normal
+ * answer (200 with "user": null), not an error, so a visitor's browser
+ * console stays clean.
+ */
+export async function getMe(signal?: AbortSignal): Promise<User | null> {
+  return (await apiGet<{ user: User | null }>('/api/auth/me', signal)).user
 }

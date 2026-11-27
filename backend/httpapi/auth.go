@@ -232,10 +232,25 @@ func (api *API) handleSignOut(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleMe says who is signed in. The frontend calls it when the page loads.
-// GET /api/auth/me
+// handleMe says who is signed in. The frontend calls it when a page loads.
+//
+// Being signed out is not an error here: it is one of the two normal
+// answers, so it is 200 with "user": null and not 401. A 401 would show up as
+// a red failed request in the browser's console on every page a visitor
+// opens. Routes that need a user (orders, checkout) still answer 401.
+// GET /api/auth/me  ->  {"user": {...}}  or  {"user": null}
 func (api *API) handleMe(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"user": currentUser(r)})
+	noStore(w)
+	user, err := api.auth.UserForToken(r.Context(), api.sessionToken(r))
+	if errors.Is(err, auth.ErrNoSession) {
+		writeJSON(w, http.StatusOK, map[string]any{"user": nil})
+		return
+	}
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
 // userKey is the key under which requireUser stores the signed-in user in

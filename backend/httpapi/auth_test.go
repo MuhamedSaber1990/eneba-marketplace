@@ -169,6 +169,31 @@ func (at *authTest) me(cookie *http.Cookie) *httptest.ResponseRecorder {
 	return at.do(request{method: http.MethodGet, path: "/api/auth/me", cookie: cookie})
 }
 
+// signedIn reports whether /api/auth/me names a user for this cookie. The
+// endpoint answers 200 either way: with the user, or with "user": null.
+func (at *authTest) signedIn(cookie *http.Cookie) bool {
+	at.t.Helper()
+	w := at.me(cookie)
+	if w.Code != http.StatusOK {
+		at.t.Fatalf("me: status %d, want 200; body %s", w.Code, w.Body)
+	}
+	var body struct {
+		User *struct {
+			Email string `json:"email"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		at.t.Fatalf("me: body is not JSON: %s", w.Body)
+	}
+	return body.User != nil
+}
+
+// orders asks for the order history, a route that does need a session.
+func (at *authTest) orders(cookie *http.Cookie) *httptest.ResponseRecorder {
+	at.t.Helper()
+	return at.do(request{method: http.MethodGet, path: "/api/orders", cookie: cookie})
+}
+
 func credentialsJSON(email, password string) string {
 	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
 	return string(body)
@@ -251,8 +276,11 @@ func TestSignUpSignOutFlow(t *testing.T) {
 		t.Errorf("sign out did not clear the cookie: %+v", cleared)
 	}
 	// ...and the old token is dead on the server, even if someone kept a copy.
-	if w := at.me(cookie); w.Code != http.StatusUnauthorized {
-		t.Errorf("me with the signed-out token: status %d, want 401", w.Code)
+	if at.signedIn(cookie) {
+		t.Error("the signed-out token still names a user")
+	}
+	if w := at.orders(cookie); w.Code != http.StatusUnauthorized {
+		t.Errorf("order history with the signed-out token: status %d, want 401", w.Code)
 	}
 
 	// Signing in again works and gives a different token.
@@ -268,12 +296,26 @@ func TestSignUpSignOutFlow(t *testing.T) {
 func TestProtectedRouteNeedsASession(t *testing.T) {
 	at := newAuthTest(t)
 
-	if w := at.me(nil); w.Code != http.StatusUnauthorized {
+	forged := &http.Cookie{Name: secureCookieName, Value: "made-up-token-made-up-token-made-up-token-123"}
+
+	// A route that needs a user refuses both.
+	if w := at.orders(nil); w.Code != http.StatusUnauthorized {
 		t.Errorf("no cookie: status %d, want 401", w.Code)
 	}
-	forged := &http.Cookie{Name: secureCookieName, Value: "made-up-token-made-up-token-made-up-token-123"}
-	if w := at.me(forged); w.Code != http.StatusUnauthorized {
+	if w := at.orders(forged); w.Code != http.StatusUnauthorized {
 		t.Errorf("a made-up token: status %d, want 401", w.Code)
+	}
+
+	// "Who am I" is different: signed out is a normal answer, not an error.
+	// It says 200 with no user, and must not leak anything else.
+	for name, cookie := range map[string]*http.Cookie{"no cookie": nil, "a made-up token": forged} {
+		w := at.me(cookie)
+		if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != `{"user":null}` {
+			t.Errorf("me with %s: status %d, body %s; want 200 and {\"user\":null}", name, w.Code, w.Body)
+		}
+		if got := w.Header().Get("Cache-Control"); got != "no-store" {
+			t.Errorf("me with %s: Cache-Control = %q, want no-store", name, got)
+		}
 	}
 }
 
@@ -281,8 +323,8 @@ func TestExpiredSessionIsRefused(t *testing.T) {
 	at := newAuthTest(t)
 	cookie := at.signUp(goodPassword)
 
-	if w := at.me(cookie); w.Code != http.StatusOK {
-		t.Fatalf("me before expiry: status %d", w.Code)
+	if !at.signedIn(cookie) {
+		t.Fatal("not signed in right after signing up")
 	}
 
 	// Move the session's expiry into the past, as if 7 days had gone by.
@@ -293,8 +335,11 @@ func TestExpiredSessionIsRefused(t *testing.T) {
 		t.Fatalf("expiring the session: %v", err)
 	}
 
-	if w := at.me(cookie); w.Code != http.StatusUnauthorized {
-		t.Errorf("me with an expired session: status %d, want 401", w.Code)
+	if at.signedIn(cookie) {
+		t.Error("an expired session still names a user")
+	}
+	if w := at.orders(cookie); w.Code != http.StatusUnauthorized {
+		t.Errorf("order history with an expired session: status %d, want 401", w.Code)
 	}
 }
 
@@ -467,8 +512,8 @@ func TestForgedRequestsAreRefused(t *testing.T) {
 	}
 
 	// After all of that, the session is still alive: the forged sign out did nothing.
-	if w := at.me(cookie); w.Code != http.StatusOK {
-		t.Errorf("the session did not survive the forged requests: status %d", w.Code)
+	if !at.signedIn(cookie) {
+		t.Error("the session did not survive the forged requests")
 	}
 }
 
