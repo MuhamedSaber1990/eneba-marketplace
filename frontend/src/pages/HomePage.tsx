@@ -30,19 +30,27 @@ export function HomePage() {
   }, [])
 
   return (
-    <div className="container home">
+    // Not a container: each block is a band across the whole window and
+    // brings its own 1200px column (see BlockSection).
+    <div className="home">
       <h1 className="visually-hidden">Keybay: digital game keys from many sellers</h1>
 
-      {layout.status === 'loading' && <div className="banners banners--loading" aria-hidden="true" />}
+      {layout.status === 'loading' && (
+        <div className="container home__state">
+          <div className="banners banners--loading" aria-hidden="true" />
+        </div>
+      )}
 
       {layout.status === 'error' && (
-        <div className="panel">
-          <p>The homepage could not be loaded. The store is still there.</p>
-          <p>
-            <Link to="/store" className="home-block__see-all">
-              Go to the store
-            </Link>
-          </p>
+        <div className="container home__state">
+          <div className="panel">
+            <p>The homepage could not be loaded. The store is still there.</p>
+            <p>
+              <Link to="/store" className="home__link">
+                Go to the store
+              </Link>
+            </p>
+          </div>
         </div>
       )}
 

@@ -39,9 +39,6 @@
   text-align: center;
 }
 
-.product-card__badge--deal {
-  background: var(--color-mint);
-}
 
 .product-card__body {
   display: flex;
@@ -85,6 +82,10 @@
 .product-card__from {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+.product-card__discount {
+  color: var(--color-lime);
 }
 
 .product-card__sold-out {

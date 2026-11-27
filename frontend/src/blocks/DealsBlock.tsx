@@ -39,16 +39,20 @@ function DealCard({ deal, now }: { deal: Deal; now: Date }) {
     <Link to={`/product/${deal.slug}`} className="product-card">
       <div className="product-card__media">
         <img src={deal.cover_url} alt="" width={225} height={300} loading="lazy" />
-        <span className="product-card__badge product-card__badge--deal">-{deal.discount_percent}%</span>
       </div>
       <div className="product-card__body">
         <h3 className="product-card__name">{deal.name}</h3>
         <p className="product-card__region">{deal.region}</p>
         <p className="product-card__price">
-          <s className="product-card__from">
-            <span className="visually-hidden">Was </span>
-            {formatPrice(deal.original_price_cents)}
-          </s>
+          {/* "From", the old price struck through, then the discount. */}
+          <span className="product-card__from">
+            From{' '}
+            <s>
+              <span className="visually-hidden">was </span>
+              {formatPrice(deal.original_price_cents)}
+            </s>{' '}
+            <span className="product-card__discount">-{deal.discount_percent}%</span>
+          </span>
           {formatPrice(deal.price_cents)}
         </p>
         <p className="deal__ends">Ends in {timeLeft(new Date(deal.ends_at), now)}</p>

@@ -6,23 +6,24 @@ import type { HomeBlock } from '../api/home'
 export type BlockProps = { block: HomeBlock }
 
 /**
- * The frame around a homepage block: the heading and the optional "See all"
- * link, both taken from the layout the backend sent.
+ * The frame around a homepage block: the heading on top and the optional
+ * "Show all" button underneath, both taken from the layout the backend sent.
+ *
+ * The section spans the whole window so it can have its own background
+ * color. The content inside sits in the same 1200px column as everything else.
  */
 export function BlockSection({ block, children }: BlockProps & { children: ReactNode }) {
   return (
     <section className="home-block">
-      {(block.title || block.see_all_url) && (
-        <header className="home-block__header">
-          {block.title && <h2 className="section-heading">{block.title}</h2>}
-          {block.see_all_url && (
-            <Link to={block.see_all_url} className="home-block__see-all">
-              See all
-            </Link>
-          )}
-        </header>
-      )}
-      {children}
+      <div className="container">
+        {block.title && <h2 className="section-heading">{block.title}</h2>}
+        {children}
+        {block.see_all_url && (
+          <Link to={block.see_all_url} className="button button--secondary home-block__show-all">
+            Show all<span className="visually-hidden"> {block.title}</span>
+          </Link>
+        )}
+      </div>
     </section>
   )
 }
