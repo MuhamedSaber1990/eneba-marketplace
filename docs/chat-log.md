@@ -3236,3 +3236,127 @@ It adds two empty columns to `orders`. Nothing existing changes.
 **4. After the push I will:** check CI, pay for an order on the live site with the test card and confirm the keys arrive through the webhook, try the declined card, and confirm the simulated endpoint answers 404 there.
 
 If you want the old behavior back at any point, changing `PAYMENT_MODE` to `simulated` and redeploying restores the two buttons.
+
+### Prompt 28
+
+````text
+You read it right, the plan was approved. Good catch on the kroner pricing.
+
+Yes to all four, in your order:
+1. Run the production migration.
+2. Set the Vercel variables, including DEMO_RESTOCK=1, then delete .env.stripe.
+3. Push.
+4. Do the live checks. Also provoke one refund on the live site so we've seen a real one, and tell me what the order page shows for it.
+
+If the webhook doesn't deliver keys on the live site, switch PAYMENT_MODE back to simulated first so the site keeps working, then tell me.
+
+One more small thing for after that: make /api/auth/me answer 200 with no user when signed out, so visitors don't get a red 401 in the browser console on every page.
+````
+
+### Reply 33
+
+Stripe works on the live site. The webhook delivered the keys, so there was no need to switch back to simulated. A real refund went through too. Phase 7 is live. The `/api/auth/me` change is built and committed locally, waiting for your ok to push.
+
+- **Site:** https://eneba-marketplace-nine.vercel.app
+
+## The four steps
+
+**1. Production migration**
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+applied 006_payments.sql
+status: nothing to do, the schema is up to date
+```
+
+**2. Vercel variables, all for Production**
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`: piped from the file as sensitive variables. Neither value was printed.
+- `PAYMENT_MODE=stripe`, `APP_URL`, `DEMO_RESTOCK=1`.
+- Vercel lists all five as encrypted.
+- `.env.stripe` is deleted. I checked it is gone.
+
+**3. Push.** CI passed on both jobs. All six migrations applied on the empty container, the race detector reported nothing, and the six Go packages passed, including the new `payments` package.
+
+**4. Live checks,** below.
+
+## A real payment on the live site
+
+As the demo account, in a browser:
+
+| Step | Result |
+|---|---|
+| Order page | one button, "Pay €8.59 with card". Countdown at 14:59 |
+| The simulated endpoint, called directly while signed in | 404 |
+| Click the button | Stripe's page. Countdown on our side now 35:55 |
+| Stripe's page | the product, the seller, the euro price only |
+| Choose "Card", pay with `4242 4242 4242 4242` | sent back to `/orders/<id>?checkout=done` |
+| Order page | "Confirming your payment" |
+| About 6 seconds later | "Paid", one key shown, cart empty |
+| Stock on the product page | 5 → 4 |
+
+The key arrived through Stripe's webhook. The return page did not fulfil anything: it only waited and asked.
+
+## A declined card
+
+With `4000 0000 0000 0002`: Stripe said "Your card was declined." and kept the buyer on its own page to try another card. On our side the order stayed "Waiting for payment". Nothing was sold.
+
+## A real refund
+
+**How I provoked it.** I placed an order and went to Stripe's page. While that page was open, I moved that one order's deadline into the past in the production database. Then I paid with the test card. This is the same situation as a buyer who pays after their reservation has run out.
+
+**What happened**
+- Stripe took the payment and called the webhook.
+- The webhook saw the order was past its deadline, did not fulfil it, and asked Stripe for a refund.
+- Stripe returned a refund id, which is stored on the order. So your restricted key's "Refunds" access works.
+- It took about 7 seconds from paying to the final state.
+
+**What the order page shows**
+- Status: **Expired**
+- A panel headed **"This order ran out of time"**
+- The text: **"Your payment arrived after the order had expired, so it was refunded in full and no keys were delivered. Your cart is still filled."**
+- A "Back to the cart" button.
+- No keys. The cart still holds the item, and stock did not change.
+
+You can see the refund in the Stripe dashboard under Payments: one €8.69 payment marked refunded.
+
+**I edited production data by hand for this,** which I had not done before: one `UPDATE` on one order's deadline, with a temporary tool that is now deleted. I did it because you asked for a real refund and there is no way to cause one from outside.
+
+## What these checks left behind on production
+
+All on the demo account:
+- 1 more paid order, and 1 key sold.
+- 1 order from the declined-card test that is still "Waiting for payment". It holds one key until its deadline, about 36 minutes after I created it, then expires by itself.
+- 1 expired, refunded order.
+- In Stripe: 2 successful test payments, one of them refunded, and one declined attempt.
+
+## `/api/auth/me` when signed out
+
+**Built, not pushed.**
+- It now answers 200 with `{"user": null}`. Before, it answered 401.
+- Routes that need a user still answer 401: the order history, an order, checkout, paying.
+- The tests check both sides: a made-up or expired token gets `{"user": null}` from `/me` and 401 from the order history.
+- The frontend reads "user or null" directly, with no error handling for the normal case.
+- All `httpapi` tests and the 59 frontend tests pass.
+
+It is `DECISIONS.md` entry 75. Entry 76 records the live Stripe results above.
+
+## Not verified
+
+- **Whether Stripe's retry of my earlier local test payment has arrived yet.** It should be accepted and ignored, since that order exists only in the dev database. I did not look for it in the logs.
+- **Payment methods other than cards.** Stripe's page also offered MB WAY, Bancontact, Satispay and EPS. I only paid by card.
+- **The restock on the live site.** `DEMO_RESTOCK=1` is set, but none of today's purchases brought an offer below 3 keys, so it has not had a reason to run there. It is covered by its tests.
+- **My automation of Stripe's page** worked three times today. It depends on Stripe's page staying as it is.
+
+## Screenshots
+
+Three more in `docs/screenshots/`, from the live site: `order-paid-stripe.png`, `stripe-declined.png` and `order-refunded.png`.
+
+## What I need from you
+
+**Ok to push** two local commits plus this log entry: the `/api/auth/me` change, and the screenshots with the two new decisions. No migration and no Vercel change are involved. After the push I will confirm on the live site that a signed-out visitor's console shows no failed request.
+
+## Where the project stands
+
+Phases 1 to 7 are done and live. Phase 8 is what is left:
+1. A styling pass against your eneba.com screenshots, which I still do not have. Send them when convenient: homepage, store, product page, cart.
+2. The README: setup, architecture overview, live URL, test credentials, known limitations.
+3. The walkthrough of the codebase file by file, and the quiz.
