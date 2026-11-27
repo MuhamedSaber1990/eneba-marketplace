@@ -4,12 +4,29 @@ import { apiGet, apiPost } from './client'
 export type User = {
   id: number
   email: string
+  name: string
+  marketing_opt_in: boolean // the "send me news about deals" choice; nothing is ever sent
+}
+
+/** Everything the sign-up form sends. The server checks all of it again. */
+export type SignUpForm = {
+  name: string
+  email: string
+  password: string
+  password_confirm: string
+  accept_terms: boolean
+  marketing_opt_in: boolean
 }
 
 type UserResponse = { user: User }
 
-export async function signUp(email: string, password: string): Promise<User> {
-  return (await apiPost<UserResponse>('/api/auth/signup', { email, password })).user
+export async function signUp(form: SignUpForm): Promise<User> {
+  return (await apiPost<UserResponse>('/api/auth/signup', form)).user
+}
+
+/** Changes the signed-in user's name and marketing choice, and returns the account as it now is. */
+export async function updateAccount(name: string, marketingOptIn: boolean): Promise<User> {
+  return (await apiPost<UserResponse>('/api/account', { name, marketing_opt_in: marketingOptIn })).user
 }
 
 export async function signIn(email: string, password: string): Promise<User> {

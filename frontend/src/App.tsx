@@ -8,11 +8,14 @@ import { AuthPage } from './pages/AuthPage'
 import { CartPage } from './pages/CartPage'
 import { CheckoutPage } from './pages/CheckoutPage'
 import { HomePage } from './pages/HomePage'
+import { PrivacyPage, TermsPage } from './pages/LegalPage'
 import { OrderPage } from './pages/OrderPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import { ProductPage } from './pages/ProductPage'
+import { SignUpPage } from './pages/SignUpPage'
 import { StorePage } from './pages/StorePage'
+import { WelcomePage } from './pages/WelcomePage'
 import { useAsync } from './lib/useAsync'
 import { AuthProvider } from './state/AuthProvider'
 import { CartProvider } from './state/CartProvider'
@@ -51,8 +54,18 @@ export default function App() {
             <Route path="/store" element={<StorePage />} />
             <Route path="/product/:slug" element={<ProductPage />} />
             <Route path="/search" element={<StorePage mode="search" />} />
-            <Route path="/signin" element={<AuthPage mode="signin" />} />
-            <Route path="/signup" element={<AuthPage mode="signup" />} />
+            <Route path="/signin" element={<AuthPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
+            <Route
+              path="/welcome"
+              element={
+                <RequireAuth>
+                  <WelcomePage />
+                </RequireAuth>
+              }
+            />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
             <Route
               path="/account"
               element={

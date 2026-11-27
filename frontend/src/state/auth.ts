@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { User } from '../api/auth'
+import type { SignUpForm, User } from '../api/auth'
 
 /**
  * Who is signed in, shared with every component.
@@ -15,7 +15,9 @@ export type AuthState = {
   /** The signed-in user, or null. */
   user: User | null
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<void>
+  signUp: (form: SignUpForm) => Promise<void>
+  /** Changes the name and the marketing choice of the signed-in user. */
+  updateProfile: (name: string, marketingOptIn: boolean) => Promise<void>
   signOut: () => Promise<void>
 }
 

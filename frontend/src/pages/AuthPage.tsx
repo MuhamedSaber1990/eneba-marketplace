@@ -1,37 +1,20 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { PasswordField } from '../components/PasswordField'
 import { safeNextPath } from '../lib/safeNext'
 import { useAuth } from '../state/auth'
 import './AuthPage.css'
 
-const TEXT = {
-  signin: {
-    title: 'Log in',
-    button: 'Log in',
-    otherQuestion: 'New here?',
-    otherLabel: 'Create an account',
-    otherPath: '/signup',
-  },
-  signup: {
-    title: 'Create an account',
-    button: 'Create account',
-    otherQuestion: 'Already have an account?',
-    otherLabel: 'Log in',
-    otherPath: '/signin',
-  },
-}
-
-/** The sign-in page and the sign-up page. They differ only in wording and in which action the form calls. */
-export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
+/** The sign-in page: an email, a password, nothing else. Sign-up is SignUpPage. */
+export function AuthPage() {
   const auth = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const text = TEXT[mode]
 
   // Where to go afterwards. Only a path on this site is accepted.
   const next = safeNextPath(searchParams.get('next'))
-  // The link to the other form keeps the destination.
-  const otherLink = next === '/' ? text.otherPath : `${text.otherPath}?next=${encodeURIComponent(next)}`
+  // The link to the sign-up form keeps the destination.
+  const signUpLink = next === '/' ? '/signup' : `/signup?next=${encodeURIComponent(next)}`
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,8 +22,8 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    document.title = `${text.title} | Keybay`
-  }, [text.title])
+    document.title = 'Log in | Keybay'
+  }, [])
 
   // Someone already signed in has no use for this page.
   if (!auth.loading && auth.user && !submitting) {
@@ -52,11 +35,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
     setError(null)
     setSubmitting(true)
     try {
-      if (mode === 'signin') {
-        await auth.signIn(email, password)
-      } else {
-        await auth.signUp(email, password)
-      }
+      await auth.signIn(email, password)
       navigate(next, { replace: true })
     } catch (caught) {
       // The API's messages are written for the visitor ("Wrong email or
@@ -69,7 +48,7 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
   return (
     <div className="container auth">
       <form className="auth__form panel" onSubmit={handleSubmit} noValidate>
-        <h1 className="auth__title">{text.title}</h1>
+        <h1 className="auth__title">Log in</h1>
 
         {/* role="alert" makes a screen reader read the error as soon as it appears. */}
         {error && (
@@ -89,28 +68,14 @@ export function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
         />
 
         <label htmlFor="auth-password">Password</label>
-        <input
-          id="auth-password"
-          type="password"
-          // Tells a password manager whether to offer a saved password or suggest a new one.
-          autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-          required
-          aria-describedby={mode === 'signup' ? 'auth-password-hint' : undefined}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        {mode === 'signup' && (
-          <p id="auth-password-hint" className="auth__hint">
-            At least 8 characters. A longer phrase is better than symbols.
-          </p>
-        )}
+        <PasswordField id="auth-password" value={password} onChange={setPassword} autoComplete="current-password" />
 
         <button className="button auth__submit" disabled={submitting}>
-          {submitting ? 'One moment…' : text.button}
+          {submitting ? 'One moment…' : 'Log in'}
         </button>
 
         <p className="auth__other">
-          {text.otherQuestion} <Link to={otherLink}>{text.otherLabel}</Link>
+          New here? <Link to={signUpLink}>Create an account</Link>
         </p>
       </form>
     </div>

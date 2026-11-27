@@ -55,6 +55,8 @@ export function Footer({ platforms }: { platforms: string[] }) {
             <a href={`${REPOSITORY}/blob/main/docs/cover-art.md`} target="_blank" rel="noreferrer">
               How the art was made
             </a>
+            <Link to="/terms">Terms</Link>
+            <Link to="/privacy">Privacy Policy</Link>
           </nav>
         </div>
 

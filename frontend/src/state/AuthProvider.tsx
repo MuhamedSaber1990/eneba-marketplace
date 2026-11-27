@@ -31,8 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async signIn(email, password) {
       setUser(await authApi.signIn(email, password))
     },
-    async signUp(email, password) {
-      setUser(await authApi.signUp(email, password))
+    async signUp(form) {
+      setUser(await authApi.signUp(form))
+    },
+    async updateProfile(name, marketingOptIn) {
+      // The server's answer replaces the remembered user, so the header
+      // shows the new name at once.
+      setUser(await authApi.updateAccount(name, marketingOptIn))
     },
     async signOut() {
       await authApi.signOut()

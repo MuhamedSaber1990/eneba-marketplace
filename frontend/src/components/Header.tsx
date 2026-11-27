@@ -30,9 +30,9 @@ export function Header({ platforms }: { platforms: string[] }) {
             {/* While "who am I" is still loading, neither set of links is
                 shown, so they do not flip from one to the other. */}
             {!auth.loading && auth.user && (
-              <Link to="/account" className="header__user" title={auth.user.email}>
+              <Link to="/account" className="header__user" title={`${auth.user.name}, your account`}>
                 <PersonIcon />
-                <span>{auth.user.email}</span>
+                <span>{auth.user.name}</span>
               </Link>
             )}
             {!auth.loading && !auth.user && (
