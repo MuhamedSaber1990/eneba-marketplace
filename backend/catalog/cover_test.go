@@ -32,7 +32,7 @@ func TestRenderSVG(t *testing.T) {
 	cover := Cover{Name: "Ashen Crown Steam Key GLOBAL", Title: "Ashen Crown", Platform: "Steam", ColorA: "#ff5f6d", ColorB: "#ffc371"}
 	svg := cover.RenderSVG()
 
-	for _, want := range []string{"<svg ", "</svg>", "ASHEN CROWN", "STEAM", "#ff5f6d", "#ffc371"} {
+	for _, want := range []string{"<svg ", "</svg>", "ASHEN CROWN", ">Steam<", `text-anchor="middle"`, "#ff5f6d", "#ffc371"} {
 		if !strings.Contains(svg, want) {
 			t.Errorf("SVG does not contain %q", want)
 		}

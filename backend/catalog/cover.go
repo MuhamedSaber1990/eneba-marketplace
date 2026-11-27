@@ -43,8 +43,10 @@ func (c Cover) RenderSVG() string {
 
 	// The platform strip.
 	fmt.Fprintf(&b, `<rect y="%d" width="%d" height="34" fill="#000000" fill-opacity="0.55"/>`, coverHeight-34, coverWidth)
-	fmt.Fprintf(&b, `<text x="20" y="%d" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="800" fill="#ffffff">%s</text>`,
-		coverHeight-12, html.EscapeString(strings.ToUpper(c.Platform)))
+	// text-anchor="middle" centers the text on its x position, which is the
+	// middle of the cover.
+	fmt.Fprintf(&b, `<text x="%d" y="%d" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#ffffff" fill-opacity="0.85">%s</text>`,
+		coverWidth/2, coverHeight-12, html.EscapeString(c.Platform))
 
 	b.WriteString(`</svg>`)
 	return b.String()

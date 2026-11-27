@@ -362,8 +362,13 @@ func (s *Store) Cover(ctx context.Context, slug string) (Cover, error) {
 
 // CoverURL is the address of a product's generated cover image.
 func CoverURL(slug string) string {
-	return "/api/products/" + slug + "/cover.svg"
+	return "/api/products/" + slug + "/cover.svg?v=" + coverVersion
 }
+
+// coverVersion is part of every cover's address. Browsers keep a cover for a
+// day. When the drawing in cover.go changes, raising this number gives every
+// cover a new address, so nobody keeps seeing the old drawing.
+const coverVersion = "2"
 
 // emptyIfNil makes sure a missing list reaches Postgres as an empty array.
 // A nil slice would be sent as NULL, and cardinality(NULL) = 0 is not true,
