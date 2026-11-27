@@ -8,6 +8,11 @@
   background: var(--color-band);
 }
 
+/* The footer brings its own space above it. */
+.home-block:last-of-type {
+  padding-bottom: 0;
+}
+
 /* The banner is the first block and sits closer to the header. */
 .home-block:first-of-type {
   padding-top: var(--space-3);
@@ -40,7 +45,7 @@
 .banners {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  grid-template-rows: repeat(2, 150px);
+  grid-template-rows: repeat(2, 190px); /* the large banner is 400 high */
   gap: var(--gap);
 }
 
@@ -91,8 +96,9 @@
 }
 
 .banner--large .banner__title {
-  max-width: 16ch;
-  font-size: 2.25rem;
+  max-width: 14ch;
+  font-size: 2.75rem;
+  line-height: 1.1;
 }
 
 .banner__subtitle {
@@ -133,10 +139,12 @@
 
 .platform-tile {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-height: 90px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 130px;
   padding: var(--space-3);
+  overflow: hidden; /* the fanned covers poke out past the tile's edge */
   background: var(--color-panel);
   border-left: 4px solid var(--color-primary);
   transition: background-color 150ms ease;
@@ -144,6 +152,48 @@
 
 .platform-tile:hover {
   background: var(--color-panel-raised);
+}
+
+.platform-tile__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  order: -1; /* the text comes first on screen; the covers are first in the markup only so they load in order */
+}
+
+/* Three small covers overlapping like a hand of cards. */
+.platform-tile__covers {
+  display: flex;
+  flex-shrink: 0;
+  margin: -20px 0;
+}
+
+.platform-tile__covers img {
+  width: 60px;
+  height: 80px;
+  object-fit: cover;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  transition: transform 200ms ease;
+}
+
+.platform-tile__covers img + img {
+  margin-left: -26px;
+}
+
+.platform-tile__covers img:nth-child(1) {
+  transform: rotate(-8deg);
+}
+
+.platform-tile__covers img:nth-child(3) {
+  transform: rotate(8deg);
+}
+
+.platform-tile:hover .platform-tile__covers img:nth-child(1) {
+  transform: rotate(-12deg) translateX(-6px);
+}
+
+.platform-tile:hover .platform-tile__covers img:nth-child(3) {
+  transform: rotate(12deg) translateX(6px);
 }
 
 .platform-tile--loading {
@@ -201,4 +251,20 @@
   .banner--large .banner__title {
     font-size: 1.625rem;
   }
+
+  .platform-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A homepage block used inside another page (the empty search page, the
+   cart). It is already inside the page column there, so it gives up its own
+   band, spacing and side padding. */
+.embedded-block .home-block {
+  padding: 0;
+  background: none;
+}
+
+.embedded-block .home-block > .container {
+  padding: 0;
 }

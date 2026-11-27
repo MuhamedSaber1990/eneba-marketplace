@@ -23,7 +23,10 @@ export function BannerBlock({ block }: BlockProps) {
               style={bannerStyle(banner)}
             >
               <span className="banner__title">{banner.title}</span>
-              <span className="banner__subtitle">{banner.subtitle}</span>
+              {/* The small banners show a title and a button. Their subtitle
+                  would run across the picture, so it is kept for screen
+                  readers only. */}
+              <span className={index === 0 ? 'banner__subtitle' : 'visually-hidden'}>{banner.subtitle}</span>
               <span className="button banner__cta">{banner.cta_label}</span>
             </Link>
           ))}

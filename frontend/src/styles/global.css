@@ -68,11 +68,24 @@ svg {
   padding: 0 var(--page-padding);
 }
 
+/* A page or section heading, with a short yellow bar before it: the same
+   bar as in the logo. */
 .section-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-heading);
   font-weight: var(--font-bold);
   line-height: 1.25;
   margin: var(--space-2) 0 var(--space-4);
+}
+
+.section-heading::before {
+  content: '';
+  flex-shrink: 0;
+  width: 8px;
+  height: 0.85em;
+  background: var(--color-primary);
 }
 
 /* Buttons. Links styled as buttons use the same classes. */
