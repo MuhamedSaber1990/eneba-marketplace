@@ -4301,3 +4301,126 @@ I can spot a likeness to something famous. I cannot rule out a likeness to a gam
 **Approval of the 24 covers and 3 banners,** or a list of any to redo.
 
 Once you approve, I start on the code as planned: files into `frontend/public/`, the `Cover` component with the title overlay, banner images with migration 007 on dev, the cache rule, tests, and before and after screenshots. Then the summary, and I ask before the production migration and before pushing.
+
+
+### Prompt 38
+
+````text
+All 27 approved, start on the code
+````
+
+### Reply 44
+
+The art is in the site locally: 24 covers with the title drawn over them and 3 banner pictures. It is committed in five commits and not pushed. Migration 007 is applied to dev only. The README draft is updated and still uncommitted.
+
+## Before and after
+
+In `~/eneba-marketplace/docs/screenshots/`:
+
+| Page | Before | After |
+|---|---|---|
+| Home, top | `phase8/after-home-0.png` | `art/home-0.png` |
+| Home, further down | `phase8/after-home-1.png` | `art/home-1.png` |
+| Store | `phase8/after-store-0.png` | `art/store-0.png` |
+| Product | `phase8/after-product-0.png` | `art/product-0.png` |
+| Cart | `phase8/after-cart-0.png` | `art/cart-0.png` |
+| Paid order | `phase8/after-order-paid.png` | `art/order-paid.png` |
+| Phone, home and store | none | `art/phone-home.png`, `art/phone-store.png` |
+
+## What I built
+
+**Covers**
+- 24 files in `frontend/public/covers/`, 908 KB together.
+- `backend/catalog/art.go` lists the titles that have art. `cover_url` is `/covers/<title>.webp?v=3` for those, and the SVG endpoint for any other title.
+- The API now also sends `title` ("Hollow Tide") and `cover_art` (true or false) with every product and deal.
+- A new `Cover` component draws the title and the platform strip over the picture on a dark fade. Cards, deal cards and the product page use it.
+- The search dropdown, the cart and order lines show the plain picture, no overlay.
+
+**Banners**
+- 3 files in `frontend/public/banners/`, 176 KB together.
+- Migration 007 adds `banners.image_url`. The banner draws a dark fade for the text, the two colors as a tint, the picture, and the two colors again underneath as the fallback.
+
+**Caching and security**
+- `vercel.json`: `/covers/` and `/banners/` are cached for a year. The `?v=` in the address is how a changed file gets through.
+- No new dependency. The Content-Security-Policy is unchanged.
+
+**Honesty**
+- The footer says "Cover and banner art is AI-generated."
+- `docs/cover-art.md`: the tool, the date, how the set was made (including the reference image that leaked a character), and the prompt for each of the 27 images.
+- `DECISIONS.md`: entries 10, 24 and 37 each have a dated "changed, see entry ..." note under the original text. New entries 82 to 85 cover the art, the overlay, the banner pictures and the caching.
+- README draft: the shortcuts section and the limitations say it, with a link to the prompts.
+
+## One change from the plan
+
+**No production seed is needed.** I said migration 007 would need a production migrate and a seed. The migration now sets the three pictures itself, finding the banners by position. So production needs the migration only, and the homepage content there is not rewritten. The seed sets the pictures too, for a fresh database.
+
+## The SQL
+
+`migrations/007_banner_images.sql`:
+
+```sql
+ALTER TABLE banners ADD COLUMN image_url TEXT;
+
+UPDATE banners SET image_url = '/banners/keys.webp?v=1' WHERE position = 1;
+UPDATE banners SET image_url = '/banners/new.webp?v=1'  WHERE position = 2;
+UPDATE banners SET image_url = '/banners/play.webp?v=1' WHERE position = 3;
+```
+
+It adds one optional column and fills it for three rows. Nothing else changes.
+
+## Tests
+
+- **New:** the list in `art.go` and the files in the folder must match in both directions, and no cover may be empty or over 80 KB. A cover address for a title with art, without art, and for an odd title such as `../../etc/passwd`. Every banner's picture must be a file that exists.
+- **All Go packages pass,** `gofmt`, `go vet`, `govulncheck` clean.
+- **Frontend:** lint, type check, build, 65 tests.
+- **In a browser on the built site with the real security headers,** at 1440 and 390 wide: home, store, product, cart, checkout, a new order paid (simulated), the empty search page. No console errors, no Content-Security-Policy violations, no page wider than the window.
+
+## Not verified
+
+- **The year-long cache header.** It is set by Vercel, so I can only check it on the live site after the push.
+- **The SVG fallback in a browser.** Every title has art now, so no page shows it. The address logic is tested, and the SVG endpoint is unchanged.
+- **Text-size units in older browsers.** The title size uses container units, supported in browsers from 2023 on. An older one would show a small but readable title.
+- **Chromium only,** as before.
+
+## Order matters for going live
+
+The new code reads `banners.image_url`. If the code went live before the migration, the banner block would fail until the migration ran. So: **migration first, then push.** The migration is safe to run while the old code is live, because the old code ignores the new column.
+
+```
+database: ep-restless-union-bhfufpzq (from .env.production)
+pending 007_banner_images.sql
+```
+
+## The layout list
+
+You asked for this after the art was in. Numbered, fix or leave, nothing built.
+
+**I would fix**
+
+1. **Hero banner: taller, with a bigger headline.** It is 320 high. At 400 the picture has room and the page opens with more weight.
+2. **Text on the two small banners.** The subtitle crosses the bright part of the picture ("The newest games in the catalog." over the comet). I strengthened the fade already, and would also keep each small banner's text to a title and a button.
+3. **Platform tiles.** They are flat boxes with a name and a count. I would put three small covers from that platform in each tile, so the tile shows what is behind it. This needs up to three cover addresses per platform from the API: a small backend change with a test.
+4. **The empty area on the product page.** To the right of the cover, under the four facts, half the block is empty. I would move the description up there, under the facts. That fills the hole and removes a section further down.
+5. **Card hover.** Now the card lifts 4 pixels. I would add a slight zoom of the picture inside its frame and a thin yellow line under the card, and give keyboard focus the same treatment.
+6. **Section headings.** A short yellow bar before each heading, echoing the bar in the logo. Small, and it ties the headings to the brand.
+7. **A fuller footer.** Three columns of real links: Shop (the platforms), Account (sign in, orders, cart), About (what this is, the GitHub repository, how the art was made), then the disclaimer line. Every link goes somewhere that exists.
+8. **Loading placeholders shaped like cards.** A cover-shaped block and three text lines, with a slow shimmer that is off for people who ask for reduced motion. Also for the product page, which now says "Loading…".
+9. **Editions of one game look identical in the store.** With art, "Obsidian Vow" three times in a row is three identical pictures. Only the small platform strip differs. I would give the strip a color accent per platform so editions can be told apart at a glance. Text names stay, no logos.
+10. **The cart page is mostly empty below one line.** I would put the best sellers row under it. It is real data from the existing block, the same thing the empty search page already does.
+
+**I would leave**
+
+- **The header, the store's filter panel, the cart layout and the colors.** They match the reference and you said to keep the structure.
+- **Six cards per row on the homepage.** Five would make the art bigger, but six fills the row with what each block returns.
+- **The same title appearing several times in the store.** Each edition is its own product with its own price, as on Eneba. Item 9 makes it easier to read. Hiding editions would change what the store is.
+- **Sign-in and sign-up pages.** They are rebuilt in the sign-up work that comes next.
+- **The rank numbers and the deal countdown.** They work and they are ours.
+- **Animations beyond hover and loading.** No carousel, no parallax, for the reasons in decision 37.
+
+**No fake features in any of this.** Items 3, 7 and 10 show real data or real links. Nothing on the list adds a control that does nothing.
+
+## What I need from you
+
+1. **Ok to run migration 007 on production.**
+2. **Ok to push** after it: the art, the seller color fix from before, and the chat log. I would then check the live site: covers, banners, the cache header, and one Stripe payment.
+3. **The layout list:** which numbers to build and which to drop. I will build them in a separate round, after the art is live.
