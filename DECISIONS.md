@@ -991,3 +991,35 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **A restricted key** (`rk_test_...`) with write access to Checkout Sessions
   and Refunds is enough, so a leaked key could do little.
 
+## 75. "Who am I" answers 200 when signed out
+
+- **Before:** `GET /api/auth/me` answered 401 for a visitor who was not
+  signed in. The frontend handled it, but the browser still printed a red
+  failed request in the console on every page a visitor opened.
+- **Now:** it answers 200 with `{"user": null}`. For this one endpoint,
+  being signed out is one of the two normal answers and not an error.
+- **What did not change:** routes that need a user (orders, checkout, paying)
+  still answer 401 without a valid session. The tests check both: a made-up
+  or expired token gets `{"user": null}` from `/me` and 401 from the order
+  history.
+
+## 76. Stripe on the live site: what was verified
+
+- **A payment:** an order paid with the test card `4242 4242 4242 4242` on
+  Stripe's page. The browser came back to the order page, which showed
+  "Confirming your payment", and about 6 seconds later the key appeared. The
+  key was delivered by Stripe's webhook, not by the return page.
+- **A declined card** (`4000 0000 0000 0002`): Stripe said "Your card was
+  declined" and kept the buyer on its page. Our order stayed "Waiting for
+  payment".
+- **A refund:** one order's deadline was moved into the past in the
+  production database while its Stripe page was open, and the page was then
+  paid. The webhook refused to fulfil it, asked Stripe for a refund, and the
+  order page showed "This order ran out of time. Your payment arrived after
+  the order had expired, so it was refunded in full and no keys were
+  delivered." Stock was unchanged. That was the only time production data
+  was edited by hand.
+- **The simulated endpoint** answers 404 on the live site, also for a
+  signed-in user.
+- **Going to pay** moved the countdown from 14:59 to 35:57.
+
