@@ -112,6 +112,39 @@ svg {
   padding: var(--space-3);
 }
 
+/* A checkbox drawn by us: an outlined square that turns yellow with a black
+   tick. It is still a real <input type="checkbox">, so the keyboard, labels
+   and screen readers work as they always do. `appearance: none` only removes
+   the browser's own drawing. */
+.checkbox {
+  appearance: none;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid var(--color-text-nav);
+  background: transparent;
+  cursor: pointer;
+}
+
+.checkbox:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+/* The tick: two sides of a small box, turned 45 degrees. */
+.checkbox:checked::before {
+  content: '';
+  width: 5px;
+  height: 10px;
+  margin-top: -2px;
+  border: solid var(--color-on-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
 /* Hidden on screen, still read by screen readers (used for form labels). */
 .visually-hidden {
   position: absolute;

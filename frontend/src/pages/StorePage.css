@@ -15,10 +15,12 @@
   width: 100%;
 }
 
+/* The filters are one lighter panel. A thin line in the page color
+   separates the groups, as in the reference. */
 .store__filters-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  background: var(--color-side-panel);
 }
 
 .filter-group {
@@ -26,9 +28,14 @@
   flex-direction: column;
   gap: var(--space-2);
   margin: 0;
-  padding: 0;
+  padding: var(--space-3);
   border: 0;
+  border-bottom: 2px solid var(--color-page);
   min-width: 0;
+}
+
+.store__filters-body > :last-child {
+  border-bottom: 0;
 }
 
 .filter-group > label,
@@ -39,7 +46,15 @@
 }
 
 .filter-group legend {
+  /* A legend ignores the fieldset's padding in most browsers, so it is
+     floated to behave like an ordinary heading inside the group. */
+  float: left;
+  width: 100%;
   margin-bottom: var(--space-2);
+}
+
+.filter-group legend + * {
+  clear: both;
 }
 
 .filter-group__row {
@@ -74,15 +89,9 @@
   cursor: pointer;
 }
 
-.filter-group__option input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--color-primary);
-}
-
 .store__clear {
   align-self: flex-start;
-  padding: 0;
+  padding: var(--space-3);
   border: 0;
   background: none;
   color: var(--color-primary);
@@ -104,24 +113,23 @@
 }
 
 .store__count {
-  color: var(--color-text-muted);
-  font-weight: var(--font-semibold);
-}
-
-.store__sort {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
 }
 
+.store__count strong {
+  font-weight: var(--font-heavy);
+}
+
+/* The sort choice reads as bold text with an arrow, not as a boxed field.
+   It is still a real <select>. */
 .store__sort select {
   height: 40px;
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-1);
   border: 0;
-  background: var(--color-input);
+  background: transparent;
   color: var(--color-text);
+  font-weight: var(--font-heavy);
+  text-align: right;
   cursor: pointer;
 }
 

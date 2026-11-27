@@ -116,11 +116,15 @@ export function StorePage({ mode = 'store' }: { mode?: 'store' | 'search' }) {
         <section className="store__results" aria-live="polite">
           <div className="store__toolbar">
             <p className="store__count">
-              {products.status === 'ready' && `${products.data.total} ${products.data.total === 1 ? 'product' : 'products'}`}
+              {products.status === 'ready' && (
+                <>
+                  Results found: <strong>{products.data.total}</strong>
+                </>
+              )}
               {products.status === 'loading' && 'Loading…'}
             </p>
             <label className="store__sort">
-              Sort by
+              <span className="visually-hidden">Sort by</span>
               <select
                 value={currentSort}
                 onChange={(event) => updateParams((params) => params.set('sort', event.target.value))}
@@ -172,7 +176,7 @@ export function StorePage({ mode = 'store' }: { mode?: 'store' | 'search' }) {
             <>
               <div className="product-grid">
                 {products.data.items.map((product) => (
-                  <ProductCard key={product.slug} product={product} />
+                  <ProductCard key={product.slug} product={product} withActions />
                 ))}
               </div>
               <Pagination page={products.data.page} totalPages={products.data.total_pages} onChange={goToPage} />
@@ -311,7 +315,7 @@ function CheckboxGroup({ title, options, selected, onToggle }: CheckboxGroupProp
       <legend>{title}</legend>
       {options.map((option) => (
         <label key={option} className="filter-group__option">
-          <input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} />
+          <input type="checkbox" className="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} />
           {option}
         </label>
       ))}

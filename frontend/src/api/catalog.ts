@@ -10,6 +10,7 @@ export type ProductSummary = {
   genre: string
   release_date: string // YYYY-MM-DD
   from_price_cents: number | null // null means sold out
+  from_offer_id: number | null // the offer with that price; null when sold out
   offer_count: number
   cover_url: string
 }

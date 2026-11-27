@@ -1,40 +1,68 @@
 import { Link } from 'react-router-dom'
 import type { ProductSummary } from '../api/catalog'
 import { formatPrice } from '../lib/money'
+import { AddToCartButton } from './AddToCartButton'
 import './ProductCard.css'
+
+type Props = {
+  product: ProductSummary
+  /** Adds a numbered badge, used by the best sellers row. */
+  rank?: number
+  /** Adds "Add to cart" and "View offers" under the price, used by the store. */
+  withActions?: boolean
+}
 
 /**
  * One product in a grid: cover on top, name, region and price underneath.
- * `rank` adds a numbered badge, used by the best sellers row.
+ *
+ * The cover and the text are one link to the product page. The buttons are
+ * outside that link, because a button inside a link is not valid HTML and a
+ * click on it would also follow the link.
  */
-export function ProductCard({ product, rank }: { product: ProductSummary; rank?: number }) {
+export function ProductCard({ product, rank, withActions = false }: Props) {
   const soldOut = product.from_price_cents === null
+  const productUrl = `/product/${product.slug}`
 
   return (
-    <Link to={`/product/${product.slug}`} className="product-card">
-      {/* width and height reserve the space, so the grid does not jump while covers load */}
-      <div className="product-card__media">
-        <img src={product.cover_url} alt="" width={225} height={300} loading="lazy" />
-        {rank !== undefined && (
-          <span className="product-card__badge">
-            <span className="visually-hidden">Rank </span>
-            {rank}
-          </span>
-        )}
-      </div>
-      <div className="product-card__body">
-        <h3 className="product-card__name">{product.name}</h3>
-        <p className="product-card__region">{product.region}</p>
-        {soldOut ? (
-          <p className="product-card__sold-out">Sold out</p>
-        ) : (
-          <p className="product-card__price">
-            <span className="product-card__from">From</span>
-            {formatPrice(product.from_price_cents!)}
-          </p>
-        )}
-      </div>
-    </Link>
+    <article className="product-card">
+      <Link to={productUrl} className="product-card__link">
+        {/* width and height reserve the space, so the grid does not jump while covers load */}
+        <div className="product-card__media">
+          <img src={product.cover_url} alt="" width={225} height={300} loading="lazy" />
+          {rank !== undefined && (
+            <span className="product-card__badge">
+              <span className="visually-hidden">Rank </span>
+              {rank}
+            </span>
+          )}
+        </div>
+        <div className="product-card__body">
+          <h3 className="product-card__name">{product.name}</h3>
+          <p className="product-card__region">{product.region}</p>
+          {soldOut ? (
+            <p className="product-card__sold-out">Sold out</p>
+          ) : (
+            <p className="product-card__price">
+              <span className="product-card__from">From</span>
+              {formatPrice(product.from_price_cents!)}
+            </p>
+          )}
+        </div>
+      </Link>
+
+      {withActions && (
+        <div className="product-card__actions">
+          {/* "Add to cart" adds the cheapest offer, the one behind the "From"
+              price. A sold-out product has no such offer and no button. */}
+          {product.from_offer_id !== null && (
+            <AddToCartButton offerId={product.from_offer_id} context={`: ${product.name}`} />
+          )}
+          <Link to={productUrl} className="button button--secondary">
+            View offers<span className="visually-hidden"> for {product.name}</span>
+          </Link>
+        </div>
+      )}
+    </article>
   )
 }
 
