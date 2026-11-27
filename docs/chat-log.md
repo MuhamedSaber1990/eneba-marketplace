@@ -4126,3 +4126,28 @@ New:
 1. Password rules: my three, or the familiar capital-number-symbol set as well?
 2. The marketing checkbox: keep it with the honest wording, or drop it?
 3. Should the name be editable on the account page?
+
+
+### Prompt 36
+
+````text
+The sign-up plan is good. Build it after the redesign like you said.
+
+1. Password rules: your three. I'd rather explain why I skipped the capital-number-symbol rules than add them.
+2. Marketing checkbox: keep it, with the honest wording on the Privacy page and the choice shown on the account page.
+3. Name: yes, make it editable on the account page, and the marketing choice too since it's the same form.
+
+Not marking old accounts as having accepted the terms is the right call.
+````
+
+### Reply 41
+
+Noted, and it is queued behind the redesign. The plan as it now stands:
+
+- **Password rules:** the three (8 characters, not your email, the two match), on the form and on the server.
+- **Marketing checkbox:** kept. The Privacy page says no emails are sent by this demo, and the account page shows the choice.
+- **Account page:** one small form to change the name and the marketing choice.
+
+That last point adds one endpoint I had not listed: `POST /api/account`, for a signed-in user only. It gets the same protections as the other changing requests (the Origin check, JSON only) and the same name rule as sign-up, with tests. Email and password stay unchangeable there, which goes into the README's limitations.
+
+**The image batch is still running.** I will come back with the contact sheet when it ends, and stop there for your approval.
