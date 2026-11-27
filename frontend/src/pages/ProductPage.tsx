@@ -5,7 +5,7 @@ import { AddToCartButton } from '../components/AddToCartButton'
 import { ChevronIcon, StarIcon } from '../components/Icons'
 import { ProductCard } from '../components/ProductCard'
 import { formatPrice } from '../lib/money'
-import { sellerMark } from '../lib/sellerMark'
+import { type SellerMark, sellerMarks } from '../lib/sellerMark'
 import { useAsync } from '../lib/useAsync'
 import '../blocks/blocks.css'
 import './ProductPage.css'
@@ -51,6 +51,11 @@ function ProductView({ product }: { product: ProductDetail }) {
   // is the best price, if it has stock at all.
   const best = product.offers.find((offer) => offer.stock > 0)
   const others = product.offers.filter((offer) => offer.id !== best?.id)
+
+  // The marks are worked out for all of the page's sellers together, so no
+  // two of them get the same color. markOf looks one up by offer.
+  const marks = sellerMarks(product.offers.map((offer) => offer.seller_name))
+  const markOf = (offer: Offer) => marks[product.offers.indexOf(offer)]
 
   return (
     <div className="container product">
@@ -115,7 +120,7 @@ function ProductView({ product }: { product: ProductDetail }) {
         <section className="product__section">
           <h2>Best offer</h2>
           <ul className="offers">
-            <OfferRow offer={best} isBest />
+            <OfferRow offer={best} mark={markOf(best)} isBest />
           </ul>
         </section>
       )}
@@ -133,7 +138,7 @@ function ProductView({ product }: { product: ProductDetail }) {
           </h2>
           <ul className="offers">
             {others.map((offer) => (
-              <OfferRow key={offer.id} offer={offer} />
+              <OfferRow key={offer.id} offer={offer} mark={markOf(offer)} />
             ))}
           </ul>
         </section>
@@ -152,9 +157,8 @@ function ProductView({ product }: { product: ProductDetail }) {
   )
 }
 
-function OfferRow({ offer, isBest = false }: { offer: Offer; isBest?: boolean }) {
+function OfferRow({ offer, mark, isBest = false }: { offer: Offer; mark: SellerMark; isBest?: boolean }) {
   const soldOut = offer.stock === 0
-  const mark = sellerMark(offer.seller_name)
 
   return (
     <li className={soldOut ? 'offer offer--sold-out' : 'offer'}>

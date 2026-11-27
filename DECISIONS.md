@@ -1082,3 +1082,15 @@ bottom. Scope decisions (what is in depth, minimal and out) are in `PLAN.md`.
 - **If it fails or is empty,** the row is left out. It is an extra, and an
   error message for it would be noise.
 
+## 81. Sellers on one page do not share a mark color
+
+- **Seen in a screenshot:** the two sellers of one product both got the
+  green mark, because their names happened to point to the same color.
+- **Fix:** the marks for a page are worked out together. A seller starts at
+  the color its name points to and moves to the next free one if an earlier
+  seller on the page already has it. With six colors, up to six sellers are
+  all different.
+- **What was given up:** a seller no longer has one fixed color across the
+  whole site. The marks appear only on the product page, and telling two
+  rows apart there matters more.
+
