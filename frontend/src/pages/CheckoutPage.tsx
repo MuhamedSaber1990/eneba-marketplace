@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { createOrder, priceCart } from '../api/checkout'
 import { ApiError } from '../api/client'
 import { CartLines } from '../components/CartLines'
+import { CheckoutSteps } from '../components/CheckoutSteps'
 import { formatPrice } from '../lib/money'
 import { useAsync } from '../lib/useAsync'
 import { useAuth } from '../state/auth'
@@ -59,8 +60,9 @@ export function CheckoutPage() {
   if (cart.lines.length === 0) {
     return (
       <div className="container checkout">
-        <h1 className="section-heading">Checkout</h1>
+        <CheckoutSteps current={2} />
         <div className="panel">
+          <h1 className="checkout__heading">Checkout</h1>
           <p>There is nothing to check out.</p>
           <Link to="/store" className="button">
             Browse the store
@@ -72,7 +74,7 @@ export function CheckoutPage() {
 
   return (
     <div className="container checkout">
-      <h1 className="section-heading">Checkout</h1>
+      <CheckoutSteps current={2} />
 
       {problem && (
         <div className="checkout__warning" role="alert">
@@ -99,7 +101,10 @@ export function CheckoutPage() {
 
       {priced.status === 'ready' && priced.data && (
         <div className="checkout__layout">
-          <CartLines lines={priced.data.lines} />
+          <section className="cart-panel">
+            <h1 className="checkout__heading">Checkout</h1>
+            <CartLines lines={priced.data.lines} />
+          </section>
 
           <aside className="panel checkout__summary">
             <h2>Your order</h2>

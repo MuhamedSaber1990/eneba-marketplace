@@ -2,6 +2,83 @@
 
 .checkout {
   padding-top: var(--space-3);
+  padding-bottom: var(--space-5);
+}
+
+/* ---- The three steps across the top ---- */
+
+.steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.steps__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* The line that joins a step to the next one. It takes the free space. */
+.steps__step:not(:last-child) {
+  flex: 1;
+}
+
+.steps__step:not(:last-child)::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-accent);
+}
+
+.steps__number {
+  display: grid;
+  place-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: var(--font-heavy);
+}
+
+/* The current step is mint. A finished one keeps white text. Color is not
+   the only signal: the current step is also marked for screen readers. */
+.steps__step--current {
+  color: var(--color-mint);
+}
+
+.steps__step--current .steps__number {
+  background: var(--color-mint);
+  color: var(--color-on-primary);
+}
+
+.steps__step--done {
+  color: var(--color-text);
+}
+
+/* The panel around the cart lines, with the page's heading inside it. */
+.cart-panel {
+  padding: var(--space-3);
+  background: var(--color-panel-raised);
+}
+
+.checkout__heading {
+  margin-bottom: var(--space-3);
+  font-size: 1.125rem;
+  font-weight: var(--font-bold);
+}
+
+.panel > .checkout__heading {
+  margin-bottom: 0;
 }
 
 .checkout .panel {
@@ -27,6 +104,16 @@
 .order__payment h2 {
   font-size: 1.125rem;
   font-weight: var(--font-bold);
+}
+
+.checkout__subtotal {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
 }
 
 .checkout__total {
@@ -92,7 +179,7 @@
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-2) var(--space-3);
-  background: var(--color-panel);
+  background: var(--color-band);
 }
 
 .cart-line__info,
@@ -130,33 +217,45 @@
   gap: var(--space-2);
 }
 
-.cart-line__controls select {
+/* Quantity: minus, the number, plus. */
+.stepper {
+  display: flex;
+  align-items: center;
+}
+
+.stepper button,
+.cart-line__remove {
+  display: grid;
+  place-content: center;
+  width: 40px;
   height: 40px;
-  padding: 0 var(--space-2);
+  padding: 0;
   border: 0;
-  background: var(--color-input);
+  background: none;
   color: var(--color-text);
   cursor: pointer;
 }
 
-.cart-line__controls option {
-  background: var(--color-panel);
-  color: var(--color-text);
+.stepper button:hover:not(:disabled),
+.cart-line__remove:hover {
+  color: var(--color-primary);
+}
+
+.stepper button:disabled {
+  color: var(--color-accent);
+  cursor: not-allowed;
+}
+
+.stepper__value {
+  min-width: 24px;
+  text-align: center;
+  font-size: 1.125rem;
+  font-weight: var(--font-heavy);
+  font-variant-numeric: tabular-nums;
 }
 
 .cart-line__remove {
-  min-height: 40px;
-  padding: 0 var(--space-1);
-  border: 0;
-  background: none;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.cart-line__remove:hover {
-  color: var(--color-text);
-  text-decoration: underline;
 }
 
 .cart-line__quantity {
@@ -312,6 +411,21 @@
 }
 
 @media (max-width: 600px) {
+  .steps {
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+  }
+
+  .cart-panel {
+    padding: var(--space-2);
+  }
+
+  .stepper button,
+  .cart-line__remove {
+    width: var(--touch-target);
+    height: var(--touch-target);
+  }
+
   /* Cover and name on the first row; controls and total on the second. */
   .cart-line {
     grid-template-columns: 60px minmax(0, 1fr);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { getOrder, type Order, type OrderStatus, payOrder, startCheckout } from '../api/checkout'
 import { ApiError } from '../api/client'
+import { CheckoutSteps } from '../components/CheckoutSteps'
 import { clockLeft } from '../lib/countdown'
 import { formatDateTime } from '../lib/dates'
 import { formatPrice } from '../lib/money'
@@ -169,6 +170,8 @@ export function OrderPage() {
 
   return (
     <div className="container checkout">
+      {/* Paid is the last step. Anything else is still about paying. */}
+      <CheckoutSteps current={shownStatus === 'paid' ? 3 : 2} />
       <h1 className="section-heading">Your order</h1>
       <p className="order__meta">
         <span className={`order__status order__status--${shownStatus}`}>{STATUS_TEXT[shownStatus]}</span>
