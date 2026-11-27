@@ -4215,3 +4215,89 @@ That is my mistake in the method, not bad luck. For the redos I will drop the re
 3. Anything in the "your call" list you want changed.
 
 Redos cost one image each. After that I rebuild the sheet, show you again, and only then start on the code.
+
+
+### Prompt 37
+
+````text
+I went through both sheets. Most of them are great. Redo your six, with your suggested changes, and drop the reference image like you said.
+
+Two more from your "your call" list:
+- Tiny Titans League: redo it. Keep the oversized heads idea but in the same rendering as the others, less caricature, so it doesn't look like it came from another shop.
+- Emberwatch: redo it in a different palette so it isn't a twin of Ashen Crown. Night blues with the fire as the accent, and not a figure from behind.
+
+Keep Gearheart Garage as it is. For the keys banner, just crop it lower if that fixes it, otherwise regenerate with more room.
+
+On the four with the same character: make sure the new ones don't share a face or hair with each other either.
+
+Then rebuild both sheets and show me again before any code.
+````
+
+### Reply 43
+
+The redos are done and both sheets are rebuilt. Nothing is in the repository and no code is written. Waiting for your approval.
+
+## Where to look
+
+- **Covers:** `/home/swardhunter/eneba-reference/generated/contact-sheet.png`
+- **Banners:** `/home/swardhunter/eneba-reference/generated/banner-sheet.png`
+
+Same paths as before, overwritten with the new versions.
+
+## What was redone: nine images
+
+All without the reference image.
+
+**The four that shared a character.** To make sure they cannot share a face or hair with each other, three of them now have no visible person at all, and the fourth is a different kind of person:
+
+1. **Starfall Odyssey:** the ship seen from outside, no pilot, flying toward a cracked blue planet. Indigo, cyan and gold.
+2. **Neon Drift 2089:** the car with dark tinted windows, no driver. Cyan, violet and acid yellow. The magenta is gone, so it no longer sits next to the kart cover as a near twin.
+3. **Verdant Protocol:** a bulky grey-white suit with an opaque visor. No face, no hair.
+4. **Mythforge Legends:** an older blacksmith with a grey beard and cropped grey hair.
+
+**The two look-alikes**
+
+5. **Banner "play":** toy vehicles, a rocket, a hot-air balloon, slides and balloons over floating platforms. No creatures.
+6. **Circuit Breakers:** two boxy robots of riveted panels, each with one camera-lens eye. No face screens. One mustard yellow, one cobalt blue.
+
+**Your two**
+
+7. **Tiny Titans League:** a young footballer in an orange kit with a slightly large head, painted like the others. The caricature grin is gone. The head is less oversized than the game's description suggests. I think that is the right side to err on, but say so if you want it pushed further.
+8. **Emberwatch:** three rescue workers in heavy gear walking toward the viewer down a night street, fire in the windows behind. Navy blue with orange as the accent. It no longer resembles Ashen Crown.
+
+**The keys banner**
+
+9. **Regenerated, not cropped.** Cropping lower could not fix it: the key and the chest together filled the full height, so a wide strip always cut one of them. I asked for a smaller subject with empty room above and below. The key now fits whole. The very bottom edge of the chest still touches the crop line, which I think is fine under a gradient and text. Look and decide.
+
+**Kept as it was:** Gearheart Garage, and the other 17.
+
+## Checked
+
+- No text, letters or logos on any of the nine.
+- No two covers in the set share a face or hair now. People with visible faces appear on Ironvale Tactics, Bladeborn Arena, Witchlight Academy, Mythforge Legends, Tiny Titans League, Gearheart Garage and the kart, and they are seven clearly different people.
+- Sizes: covers 16 to 54 KB, banners 46 to 62 KB.
+
+## Two things that went wrong on my side
+
+- **I edited the generation script while the batch was starting.** Three of the eight runs read a half-written file and stopped with a syntax error. I reran those three. It is likely they had already produced an image before failing, so about three images of quota were spent for nothing.
+- **Total images generated today: 39.** 27 in the first round, 9 redos, and the 3 probable duplicates. That is within the 30 to 40 I estimated, at the top of it.
+
+## The record
+
+`/home/swardhunter/eneba-reference/generated/prompts.md` now has:
+- the tool and date,
+- how the set was made, including that the reference image leaked and was dropped,
+- the final prompt for each of the 27 images,
+- for each redone image, why its first version was rejected.
+
+The nine rejected images and their prompts are kept in `rejected/` in the same folder.
+
+## Same caveat as before
+
+I can spot a likeness to something famous. I cannot rule out a likeness to a game or an artist I do not know. The sheet is yours to judge.
+
+## What I need from you
+
+**Approval of the 24 covers and 3 banners,** or a list of any to redo.
+
+Once you approve, I start on the code as planned: files into `frontend/public/`, the `Cover` component with the title overlay, banner images with migration 007 on dev, the cache rule, tests, and before and after screenshots. Then the summary, and I ask before the production migration and before pushing.
